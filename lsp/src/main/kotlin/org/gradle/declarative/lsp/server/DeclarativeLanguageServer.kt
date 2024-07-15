@@ -2,15 +2,12 @@ package org.gradle.declarative.lsp.server
 
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.*
-import org.gradle.declarative.dsl.tooling.models.DeclarativeSchemaModel
 import org.gradle.tooling.GradleConnector
-import java.io.File
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 import kotlin.system.exitProcess
 
 class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
-
     val LOG = Logger.getLogger(DeclarativeLanguageServer::class.java.name)
 
     lateinit var client: LanguageClient

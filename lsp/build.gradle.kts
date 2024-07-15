@@ -1,28 +1,28 @@
 import org.gradle.declarative.buildlogic.ClasspathWriter
-import java.net.URI
 
 plugins {
     alias(libs.plugins.jvm)
 }
 
-repositories {
-    mavenCentral()
-    maven {
-        url = URI.create("https://repo.gradle.org/gradle/libs-releases")
-    }
-}
-
 dependencies {
+    implementation(project(":model"))
     implementation(libs.lsp4j)
     implementation(libs.gradle.tooling.api)
     implementation(libs.gradle.declarative.dsl.core)
     implementation(libs.gradle.declarative.dsl.evaluator)
     implementation(libs.gradle.declarative.dsl.tooling.models)
+
+    testImplementation(libs.logback.classic)
 }
 
 testing {
     suites {
         val test by getting(JvmTestSuite::class) {
+            java {
+                toolchain {
+                    languageVersion.set(JavaLanguageVersion.of(17))
+                }
+            }
             useKotlinTest("2.0.0")
         }
     }

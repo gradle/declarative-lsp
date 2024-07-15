@@ -1,23 +1,25 @@
 package org.gradle.declarative.lsp.server
 
+import kotlinx.coroutines.*
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.*
+import org.gradle.declarative.dsl.tooling.models.DeclarativeSchemaModel
+import org.gradle.declarative.lsp.tooling.ConnectionHandler
 import org.gradle.tooling.GradleConnector
+import java.io.File
+import java.net.URI
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 import kotlin.system.exitProcess
 
 class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
-    val LOG = Logger.getLogger(DeclarativeLanguageServer::class.java.name)
+    private lateinit var client: LanguageClient
 
-    lateinit var client: LanguageClient
-    val connectorMap = mutableMapOf<String, GradleConnector>()
+    private val textDocumentService = DeclarativeTextDocumentService()
+    private val workspaceService = DeclarativeWorkspaceService()
 
-    val textDocumentService = DeclarativeTextDocumentService()
-    val workspaceService = DeclarativeWorkspaceService()
-
-    var initialized = false
-    var tracingLevel = TraceValue.Off;
+    private var initialized = false
+    private var tracingLevel = TraceValue.Off;
 
     private fun checkInitialized() {
         if (!initialized) {
@@ -34,6 +36,15 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
     override fun initialize(params: InitializeParams?): CompletableFuture<InitializeResult> {
         val serverCapabilities = ServerCapabilities()
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
+        serverCapabilities.setHoverProvider(true)
+
+        val workspaceFolder = params!!.workspaceFolders[0]
+        val workspaceFolderFile = File(URI.create(workspaceFolder.uri))
+        System.err.println("Fetching declarative model for workspace folder: $workspaceFolderFile")
+        ConnectionHandler(workspaceFolderFile).let {
+            val declarativeModel = it.getDeclarativeModel()
+            textDocumentService.setDeclarativeModel(declarativeModel)
+        }
 
         initialized = true
         System.err.println("Gradle Declartive Language Server: initialized")

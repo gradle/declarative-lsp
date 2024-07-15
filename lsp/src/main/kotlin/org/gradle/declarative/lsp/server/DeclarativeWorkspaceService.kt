@@ -5,10 +5,11 @@ import org.eclipse.lsp4j.DidChangeWatchedFilesParams
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.WorkspaceService
+import org.gradle.declarative.dsl.tooling.models.DeclarativeSchemaModel
 
 class DeclarativeWorkspaceService(): WorkspaceService, LanguageClientAware {
 
-    lateinit var client: LanguageClient
+    private lateinit var client: LanguageClient
 
     override fun connect(client: LanguageClient?) {
         this.client = client!!

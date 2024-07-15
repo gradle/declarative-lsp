@@ -16,4 +16,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "declarative-lsp"
+include("model")
 include("lsp")

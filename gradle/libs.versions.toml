@@ -18,6 +18,7 @@ gradle-tooling-api = { module = "org.gradle:gradle-tooling-api", version.ref = "
 gradle-declarative-dsl-core = { module = "org.gradle:gradle-declarative-dsl-core", version.ref = "declarative-dsl" }
 gradle-declarative-dsl-evaluator = { module = "org.gradle:gradle-declarative-dsl-evaluator", version.ref = "declarative-dsl" }
 gradle-declarative-dsl-tooling-models = { module = "org.gradle:gradle-declarative-dsl-tooling-models", version.ref = "declarative-dsl" }
+gradle-declarative-dsl-tooling-builders = { module = "org.gradle:gradle-declarative-dsl-tooling-builders", version.ref = "declarative-dsl" }
 
 [plugins]
 jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

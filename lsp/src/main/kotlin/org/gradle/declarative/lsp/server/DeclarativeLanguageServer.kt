@@ -1,15 +1,11 @@
 package org.gradle.declarative.lsp.server
 
-import kotlinx.coroutines.*
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.*
-import org.gradle.declarative.dsl.tooling.models.DeclarativeSchemaModel
 import org.gradle.declarative.lsp.tooling.ConnectionHandler
-import org.gradle.tooling.GradleConnector
 import java.io.File
 import java.net.URI
 import java.util.concurrent.CompletableFuture
-import java.util.logging.Logger
 import kotlin.system.exitProcess
 
 class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
@@ -42,8 +38,8 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))
         System.err.println("Fetching declarative model for workspace folder: $workspaceFolderFile")
         ConnectionHandler(workspaceFolderFile).let {
-            val declarativeModel = it.getDeclarativeModel()
-            textDocumentService.setDeclarativeModel(declarativeModel)
+            val declarativeBuildModel = it.getDomPrequisites()
+            textDocumentService.setResources(declarativeBuildModel)
         }
 
         initialized = true

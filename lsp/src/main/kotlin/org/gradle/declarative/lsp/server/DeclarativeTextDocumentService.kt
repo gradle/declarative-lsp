@@ -5,12 +5,12 @@ import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
+import org.gradle.declarative.lsp.modelutils.FoldingRangeVisitor
+import org.gradle.declarative.lsp.modelutils.LocationMatchingVisitor
+import org.gradle.declarative.lsp.modelutils.visit
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
-import org.gradle.internal.declarativedsl.dom.DeclarativeDocument.DocumentNode.ElementNode
-import org.gradle.internal.declarativedsl.dom.DeclarativeDocument.DocumentNode.PropertyNode
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
-import org.gradle.internal.declarativedsl.language.SourceData
 import java.io.File
 import java.net.URI
 import java.util.concurrent.CompletableFuture
@@ -49,6 +49,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
             AnalysisDocumentUtils.documentWithConventions(settingsSchema, fileSchema)?.let {
                 domStore[uri] = it.document
             }
+
             System.err.println("Stored declarative model for document: $uri")
         }
     }
@@ -66,34 +67,59 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 
     override fun hover(params: HoverParams?): CompletableFuture<Hover> {
-        params?.textDocument?.uri?.let { uri ->
-            val position = params.position
-            System.err.println("Hovering over document: $uri at line ${position.line} column ${position.character}")
+        val hover = params?.let { nonNullParams ->
+            withDom(nonNullParams.textDocument) { dom ->
+                val position = nonNullParams.position
 
-            domStore[uri]?.let {
-                val closest = findBestFitting(it.content, position)
-                System.err.println("Closest node: $closest")
-            }
-        }
+                // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
+                val visitor = LocationMatchingVisitor(position.line + 1, position.character + 1)
+                dom.visit(visitor)
 
-        return CompletableFuture()
-    }
+                visitor.matchingNode?.let { node ->
+                    when (node) {
+                        is DeclarativeDocument.DocumentNode.PropertyNode -> node.name
+                        is DeclarativeDocument.DocumentNode.ElementNode -> node.name
+                        else -> null
+                    }?.let { name ->
+                        // We need to convert back the 1-based locations to 0-based ones
+                        val startPosition = Position(
+                            node.sourceData.lineRange.first - 1,
+                            node.sourceData.startColumn - 1
+                        )
+                        // End position is tricky, as...
+                        val endPosition = Position(
+                            node.sourceData.lineRange.last - 1,
+                            // ... the end column is exclusive, so we DON'T need to subtract 1
+                            node.sourceData.endColumn
+                        )
 
-    companion object {
-        fun findBestFitting(
-            nodes: List<DeclarativeDocument.DocumentNode>, cursorPosition: Position
-        ): DeclarativeDocument.DocumentNode? {
-            return nodes.firstNotNullOf { node ->
-                when (node) {
-                    is ElementNode -> findBestFitting(node.content, cursorPosition)
-                    is PropertyNode -> if (cursorIsInside(node.sourceData, cursorPosition)) node else null
-                    else -> null
+                        Hover(
+                            MarkupContent("plaintext", name),
+                            Range(startPosition, endPosition)
+                        )
+                    }
                 }
             }
         }
-
-        private fun cursorIsInside(candidatePosition: SourceData, cursorPosition: Position): Boolean {
-            return candidatePosition.lineRange.contains(cursorPosition.line) && candidatePosition.startColumn <= cursorPosition.character && candidatePosition.endColumn >= cursorPosition.character
-        }
+        return CompletableFuture.completedFuture(hover)
     }
+
+    override fun foldingRange(params: FoldingRangeRequestParams?): CompletableFuture<MutableList<FoldingRange>> {
+        System.err.println("Asking for folding ranges")
+        val foldingRanges = withDom(params?.textDocument) { dom ->
+            val visitor = FoldingRangeVisitor()
+            dom.visit(visitor)
+            visitor.foldingRanges
+        }
+        return CompletableFuture.completedFuture(foldingRanges)
+    }
+
+    private fun <T> withDom(textDocument: TextDocumentIdentifier?, work: (DeclarativeDocument) -> T): T? =
+        textDocument?.uri?.let {
+            val dom = domStore[it]
+            dom?.let {
+                work.invoke(dom)
+            }
+        }
+
 }

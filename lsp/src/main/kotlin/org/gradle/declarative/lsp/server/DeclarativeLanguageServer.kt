@@ -33,6 +33,7 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         val serverCapabilities = ServerCapabilities()
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
         serverCapabilities.setHoverProvider(true)
+        serverCapabilities.setFoldingRangeProvider(true)
 
         val workspaceFolder = params!!.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))

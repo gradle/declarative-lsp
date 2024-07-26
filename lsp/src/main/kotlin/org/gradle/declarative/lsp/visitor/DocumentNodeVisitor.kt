@@ -27,7 +27,9 @@ open class DocumentNodeVisitor {
 
 /**
  * Extension function to visit all nodes in a DeclarativeDocument.
- * In order to use this, implement a subclass of [DocumentNodeVisitor] and override the methods you need to do the analysis.
+ *
+ * In order to use this, implement a subclass of [DocumentNodeVisitor]
+ * and override the methods you need to do the analysis.
  */
 fun DeclarativeDocument.visit(visitor: DocumentNodeVisitor) {
     // Initialize the list of nodes to visit with the root nodes of the forest

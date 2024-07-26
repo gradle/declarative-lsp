@@ -5,7 +5,6 @@ import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
-import org.gradle.declarative.lsp.visitor.FoldingRangeVisitor
 import org.gradle.declarative.lsp.visitor.LocationMatchingVisitor
 import org.gradle.declarative.lsp.visitor.visit
 import org.gradle.declarative.lsp.storage.VersionedDocumentStore

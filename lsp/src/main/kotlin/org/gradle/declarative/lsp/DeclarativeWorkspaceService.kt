@@ -6,7 +6,7 @@ import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.WorkspaceService
 
-class DeclarativeWorkspaceService(): WorkspaceService, LanguageClientAware {
+class DeclarativeWorkspaceService : WorkspaceService, LanguageClientAware {
 
     private lateinit var client: LanguageClient
 

@@ -11,6 +11,7 @@
 /.idea/*
 !.idea/detekt.xml
 !.idea/externalDependencies.xml
+!/.idea/copyright
 !/.idea/codeStyles
 !/.idea/inspectionProfiles
 !.idea/icon.svg

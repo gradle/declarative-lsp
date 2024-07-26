@@ -5,6 +5,7 @@ import org.eclipse.lsp4j.DidChangeWatchedFilesParams
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.WorkspaceService
+import org.slf4j.LoggerFactory
 
 class DeclarativeWorkspaceService : WorkspaceService, LanguageClientAware {
 
@@ -15,10 +16,14 @@ class DeclarativeWorkspaceService : WorkspaceService, LanguageClientAware {
     }
 
     override fun didChangeConfiguration(params: DidChangeConfigurationParams?) {
-        System.err.println("Changed configuration: ${params?.settings}")
+        LOGGER.info("Changed configuration: ${params?.settings}")
     }
 
     override fun didChangeWatchedFiles(params: DidChangeWatchedFilesParams?) {
-        System.err.println("Changed watched files: ${params?.changes}")
+        LOGGER.info("Changed watched files: ${params?.changes}")
+    }
+
+    companion object {
+        private val LOGGER = LoggerFactory.getLogger(DeclarativeWorkspaceService::class.java)
     }
 }

@@ -4,6 +4,10 @@
 package org.gradle.declarative.lsp
 
 import org.eclipse.lsp4j.launch.LSPLauncher
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+
+private val LOGGER: Logger = LoggerFactory.getLogger("org.gradle.declarative.lsp.Main")
 
 fun main() {
     val languageServer = DeclarativeLanguageServer()
@@ -18,8 +22,8 @@ fun main() {
 
     // Start the language server
     val listening = launcher.startListening()
-    System.err.println("Gradle Declartive Language Server: started")
+    LOGGER.info("Gradle Declartive Language Server: started")
     // Wait until the language server is stopped
     listening.get()
-    System.err.println("Gradle Declartive Language Server: stopped")
+    LOGGER.info("Gradle Declartive Language Server: stopped")
 }

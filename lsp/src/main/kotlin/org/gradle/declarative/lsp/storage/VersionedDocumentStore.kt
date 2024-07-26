@@ -1,21 +1,27 @@
 package org.gradle.declarative.lsp.storage
 
-import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
+import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import java.net.URI
 
+/**
+ * Class holding versioned documents.
+ *
+ * The LSP protocol allows for versioned documents, whereas the document is changed, a new, higher version is sent.
+ * This class helps storing and retrieving these versioned documents.
+ */
 class VersionedDocumentStore {
 
     private val store = mutableMapOf<URI, DocumentStoreEntry>()
 
-    operator fun get(uri: URI): DeclarativeDocument? {
+    operator fun get(uri: URI): DocumentOverlayResult? {
         return store[uri]?.document
     }
 
-    fun storeInitial(uri: URI, document: DeclarativeDocument) {
+    fun storeInitial(uri: URI, document: DocumentOverlayResult) {
         store(uri, DocumentStoreEntry.Initial(document))
     }
 
-    fun storeVersioned(uri: URI, version: Int, document: DeclarativeDocument) {
+    fun storeVersioned(uri: URI, version: Int, document: DocumentOverlayResult) {
         store(uri, DocumentStoreEntry.Versioned(version, document))
     }
 
@@ -45,8 +51,8 @@ class VersionedDocumentStore {
 }
 
 sealed class DocumentStoreEntry {
-    abstract val document: DeclarativeDocument
+    abstract val document: DocumentOverlayResult
 
-    data class Initial(override val document: DeclarativeDocument) : DocumentStoreEntry()
-    data class Versioned(val version: Int, override val document: DeclarativeDocument) : DocumentStoreEntry()
+    data class Initial(override val document: DocumentOverlayResult) : DocumentStoreEntry()
+    data class Versioned(val version: Int, override val document: DocumentOverlayResult) : DocumentStoreEntry()
 }

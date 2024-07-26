@@ -1,5 +1,8 @@
 package org.gradle.declarative.lsp
 
+import org.eclipse.lsp4j.CodeAction
+import org.eclipse.lsp4j.CodeActionParams
+import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.DidChangeTextDocumentParams
 import org.eclipse.lsp4j.DidCloseTextDocumentParams
 import org.eclipse.lsp4j.DidOpenTextDocumentParams
@@ -9,6 +12,7 @@ import org.eclipse.lsp4j.HoverParams
 import org.eclipse.lsp4j.MarkupContent
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
@@ -17,15 +21,22 @@ import org.gradle.declarative.lsp.storage.VersionedDocumentStore
 import org.gradle.declarative.lsp.visitor.LocationMatchingVisitor
 import org.gradle.declarative.lsp.visitor.visit
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
+import org.gradle.internal.declarativedsl.dom.mutation.MutationApplicability
+import org.gradle.internal.declarativedsl.dom.mutation.MutationApplicabilityChecker
+import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URI
 import java.util.concurrent.CompletableFuture
 
 class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware {
-
     private val documentStore = VersionedDocumentStore()
+    private val availableMutations = listOf(
+        AddDependency()
+    )
+    private val applicableMutations: List<MutationApplicability> = mutableListOf()
 
     private lateinit var client: LanguageClient
     private lateinit var resources: ResolvedDeclarativeResourcesModel
@@ -48,10 +59,12 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         params?.textDocument?.uri?.let { uri ->
             URI(uri)
         }?.let { uri ->
-            System.err.println("Opened document: $uri")
+            LOGGER.trace("Opened document: {}", uri)
             val text = File(uri).readText()
             documentStore.storeInitial(uri, parse(uri, text))
-            System.err.println("Stored declarative model for document: $uri")
+            LOGGER.trace("Stored declarative model for document: {}", uri)
+
+            processDocument(uri)
         }
     }
 
@@ -64,17 +77,18 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                     nonNullParams.textDocument.version,
                     parse(uri, change.text)
                 )
+                processDocument(uri)
             }
-            System.err.println("Changed document: ${params.textDocument?.uri}")
+            LOGGER.trace("Changed document: ${params.textDocument?.uri}")
         }
     }
 
     override fun didClose(params: DidCloseTextDocumentParams?) {
-        System.err.println("Closed document: ${params?.textDocument?.uri}")
+        LOGGER.trace("Closed document: ${params?.textDocument?.uri}")
     }
 
     override fun didSave(params: DidSaveTextDocumentParams?) {
-        System.err.println("Saved document: ${params?.textDocument?.uri}")
+        LOGGER.trace("Saved document: ${params?.textDocument?.uri}")
     }
 
     override fun hover(params: HoverParams?): CompletableFuture<Hover> {
@@ -85,7 +99,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
 
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
                 val visitor = LocationMatchingVisitor(position.line + 1, position.character + 1)
-                dom.visit(visitor)
+                dom.document.visit(visitor)
 
                 visitor.matchingNode?.let { node ->
                     when (node) {
@@ -116,23 +130,48 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         return CompletableFuture.completedFuture(hover)
     }
 
-    // Utility and other member functions -------------------------------------
+    override fun codeAction(params: CodeActionParams?): CompletableFuture<MutableList<Either<Command, CodeAction>>> {
+        params?.let { nonNullParams ->
+            val uri = URI(nonNullParams.textDocument.uri)
+            withDom(uri) { dom ->
+                val mac = MutationApplicabilityChecker(resources.analysisSchema, dom.result)
+                availableMutations.forEach { mutation ->
+                    val applicability = mac.checkApplicability(mutation)
+                    LOGGER.info("Applicability: {}", applicability)
+                }
+            }
+        }
 
-    private fun parse(uri: URI, text: String): DeclarativeDocument {
+        return CompletableFuture.completedFuture(null)
+    }
+
+    // Common processing -----------------------------------------------------------------------------------------------
+
+    private fun processDocument(uri: URI) = withDom(uri) {
+
+    }
+
+    // Utility and other member functions ------------------------------------------------------------------------------
+
+    private fun parse(uri: URI, text: String): DocumentOverlayResult {
         val fileName = uri.path.substringAfterLast('/')
         val fileSchema = schemaEvaluator.evaluate(fileName, text)
         val settingsSchema = schemaEvaluator.evaluate(
             resources.settingsFile.name, resources.settingsFile.readText()
         )
 
-        System.err.println("Parsed declarative model for document: $uri")
+        LOGGER.trace("Parsed declarative model for document: {}", uri)
         val document = AnalysisDocumentUtils.documentWithModelDefaults(settingsSchema, fileSchema)
-        return document!!.document
+        return document!!
     }
 
-    private fun <T> withDom(uri: URI, work: (DeclarativeDocument) -> T): T? {
+    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult) -> T): T? {
         return documentStore[uri]?.let { document ->
             work(document)
         }
+    }
+
+    companion object {
+        private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::class.java)
     }
 }

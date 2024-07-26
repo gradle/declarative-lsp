@@ -12,6 +12,7 @@ import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.eclipse.lsp4j.services.WorkspaceService
 import org.gradle.declarative.lsp.tapi.ConnectionHandler
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URI
 import java.util.concurrent.CompletableFuture
@@ -42,17 +43,18 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         val serverCapabilities = ServerCapabilities()
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
         serverCapabilities.setHoverProvider(true)
+        serverCapabilities.setCodeActionProvider(true)
 
         val workspaceFolder = params!!.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))
-        System.err.println("Fetching declarative model for workspace folder: $workspaceFolderFile")
+        LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
         ConnectionHandler(workspaceFolderFile).let {
             val declarativeBuildModel = it.getDomPrequisites()
             textDocumentService.setResources(declarativeBuildModel)
         }
 
         initialized = true
-        System.err.println("Gradle Declartive Language Server: initialized")
+        LOGGER.info("Gradle Declartive Language Server: initialized")
         return CompletableFuture.completedFuture(InitializeResult(serverCapabilities))
     }
 
@@ -66,18 +68,22 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
     }
 
     override fun getTextDocumentService(): TextDocumentService {
-        System.err.println("Gradle Declartive Language Server: getTextDocumentService")
+        LOGGER.info("Gradle Declartive Language Server: getTextDocumentService")
         return textDocumentService
     }
 
     override fun getWorkspaceService(): WorkspaceService {
-        System.err.println("Gradle Declartive Language Server: getWorkspaceService")
+        LOGGER.info("Gradle Declartive Language Server: getWorkspaceService")
         return workspaceService
     }
 
     override fun setTrace(params: SetTraceParams?) {
         checkInitialized()
         tracingLevel = params?.value ?: TraceValue.Off
+    }
+
+    companion object {
+        private val LOGGER = LoggerFactory.getLogger(DeclarativeLanguageServer::class.java)
     }
 
 }

@@ -27,8 +27,8 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
     private var tracingLevel = TraceValue.Off;
 
     private fun checkInitialized() {
-        if (!initialized) {
-            throw IllegalStateException("Language server not initialized")
+        require(initialized) {
+            "Language server is not initialized"
         }
     }
 

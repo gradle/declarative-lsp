@@ -20,6 +20,11 @@ dependencies {
     testImplementation(libs.mockk)
 }
 
+detekt {
+    // overwrite the config file's location
+    config.convention(project.isolated.rootProject.projectDirectory.file("gradle/detekt.yml"))
+}
+
 testing {
     suites {
         val test by getting(JvmTestSuite::class) {

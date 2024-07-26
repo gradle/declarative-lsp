@@ -17,7 +17,7 @@ dependencies {
     implementation(libs.gradle.declarative.dsl.evaluator)
     implementation(libs.gradle.declarative.dsl.tooling.models)
 
-    testImplementation(libs.logback.classic)
+    testImplementation(libs.mockk)
 }
 
 testing {

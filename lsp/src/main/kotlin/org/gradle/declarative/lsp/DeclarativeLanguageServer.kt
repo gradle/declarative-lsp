@@ -2,7 +2,6 @@ package org.gradle.declarative.lsp
 
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.*
-import org.gradle.declarative.lsp.logging.LoggingUtils
 import org.gradle.declarative.lsp.tapi.ConnectionHandler
 import java.io.File
 import java.net.URI
@@ -42,8 +41,6 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
             val declarativeBuildModel = it.getDomPrequisites()
             textDocumentService.setResources(declarativeBuildModel)
         }
-
-        LoggingUtils.useLspLogger(client)
 
         initialized = true
         System.err.println("Gradle Declartive Language Server: initialized")

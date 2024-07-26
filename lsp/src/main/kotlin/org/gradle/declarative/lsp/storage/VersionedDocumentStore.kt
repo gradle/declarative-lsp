@@ -25,29 +25,22 @@ class VersionedDocumentStore {
      *
      * @return `true` if the document was stored, `false` otherwise.
      */
-    private fun store(uri: URI, entry: DocumentStoreEntry) {
-        return when (val storedEntry = store[uri]) {
-            null -> store[uri] = entry
-            is DocumentStoreEntry.Initial -> {
-                when (entry) {
-                    is DocumentStoreEntry.Initial -> throw IllegalArgumentException("Cannot store an initial document when an initial document is already stored.")
-                    is DocumentStoreEntry.Versioned -> store[uri] = entry
-                }
+    private fun store(uri: URI, entry: DocumentStoreEntry): Boolean {
+        val storeEntry = store[uri]
+        if (storeEntry is DocumentStoreEntry.Versioned && entry is DocumentStoreEntry.Versioned) {
+            // If both are versioned, we only store if the new version is greater
+            if (entry.version > storeEntry.version) {
+                store[uri] = entry
+                return true
             }
-
-            is DocumentStoreEntry.Versioned -> {
-                when (entry) {
-                    is DocumentStoreEntry.Initial -> throw IllegalArgumentException("Cannot store an initial document when a versioned document is already stored.")
-                    is DocumentStoreEntry.Versioned -> {
-                        if (storedEntry.version >= entry.version) {
-                            store[uri] = entry
-                        } else {
-                            throw IllegalArgumentException("Cannot store a versioned document with a version less than the stored version.")
-                        }
-                    }
-                }
-            }
+        } else {
+            // In any other case (e.g. not stored value, value is re-initialized), we store the new value
+            store[uri] = entry
+            return true
         }
+
+        // If we reach this point, the document was not stored
+        return false
     }
 }
 

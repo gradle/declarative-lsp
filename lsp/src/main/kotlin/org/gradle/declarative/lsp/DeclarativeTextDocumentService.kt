@@ -109,20 +109,6 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         return CompletableFuture.completedFuture(hover)
     }
 
-    override fun foldingRange(params: FoldingRangeRequestParams?): CompletableFuture<MutableList<FoldingRange>> {
-        System.err.println("Asking for folding ranges")
-        params?.let { nonNullParams ->
-            val uri = URI(nonNullParams.textDocument.uri)
-            val foldingRanges = withDom(uri) { dom ->
-                val visitor = FoldingRangeVisitor()
-                dom.visit(visitor)
-                visitor.foldingRanges
-            }
-            return CompletableFuture.completedFuture(foldingRanges)
-        }
-        return CompletableFuture.completedFuture(mutableListOf())
-    }
-
     // Utility and other member functions -------------------------------------
 
     private fun parse(uri: URI, text: String): DeclarativeDocument {
@@ -133,7 +119,8 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         )
 
         System.err.println("Parsed declarative model for document: $uri")
-        return AnalysisDocumentUtils.documentWithConventions(settingsSchema, fileSchema)!!.document
+        val document = AnalysisDocumentUtils.documentWithModelDefaults(settingsSchema, fileSchema)
+        return document!!.document
     }
 
     private fun <T> withDom(uri: URI, work: (DeclarativeDocument) -> T): T? {

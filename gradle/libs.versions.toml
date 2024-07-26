@@ -3,7 +3,7 @@
 
 [versions]
 lsp4j = "0.23.1"
-logback-classic = "1.5.6"
+logback = "1.5.6"
 kotlin = "2.0.0"
 kotlinx-coroutines = "1.8.1"
 gradle-tooling = "+"
@@ -13,7 +13,8 @@ declarative-dsl = "+"
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-core-jvm = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core-jvm", version.ref = "kotlinx-coroutines" }
 lsp4j = { group = "org.eclipse.lsp4j", name = "org.eclipse.lsp4j", version.ref = "lsp4j" }
-logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback-classic" }
+logback-core = { group = "ch.qos.logback", name = "logback-core", version.ref = "logback" }
+logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" }
 gradle-tooling-api = { module = "org.gradle:gradle-tooling-api", version.ref = "gradle-tooling" }
 gradle-declarative-dsl-core = { module = "org.gradle:gradle-declarative-dsl-core", version.ref = "declarative-dsl" }
 gradle-declarative-dsl-evaluator = { module = "org.gradle:gradle-declarative-dsl-evaluator", version.ref = "declarative-dsl" }

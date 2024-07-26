@@ -4,7 +4,6 @@
 package org.gradle.declarative.lsp
 
 import org.eclipse.lsp4j.launch.LSPLauncher
-import org.gradle.declarative.lsp.server.DeclarativeLanguageServer
 
 fun main() {
     val languageServer = DeclarativeLanguageServer()

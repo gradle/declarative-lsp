@@ -1,13 +1,14 @@
-package org.gradle.declarative.lsp.server
+package org.gradle.declarative.lsp
 
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
-import org.gradle.declarative.lsp.modelutils.FoldingRangeVisitor
-import org.gradle.declarative.lsp.modelutils.LocationMatchingVisitor
-import org.gradle.declarative.lsp.modelutils.visit
+import org.gradle.declarative.lsp.visitor.FoldingRangeVisitor
+import org.gradle.declarative.lsp.visitor.LocationMatchingVisitor
+import org.gradle.declarative.lsp.visitor.visit
+import org.gradle.declarative.lsp.storage.VersionedDocumentStore
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
@@ -17,7 +18,7 @@ import java.util.concurrent.CompletableFuture
 
 class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware {
 
-    private val domStore = mutableMapOf<String, DeclarativeDocument>()
+    private val documentStore = VersionedDocumentStore()
 
     private lateinit var client: LanguageClient
     private lateinit var resources: ResolvedDeclarativeResourcesModel
@@ -26,6 +27,8 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     override fun connect(client: LanguageClient?) {
         this.client = client!!
     }
+
+    // LSP Functions ----------------------------------------------------------
 
     fun setResources(resources: ResolvedDeclarativeResourcesModel) {
         this.resources = resources
@@ -36,26 +39,27 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
 
     override fun didOpen(params: DidOpenTextDocumentParams?) {
         params?.textDocument?.uri?.let { uri ->
+            URI(uri)
+        }?.let { uri ->
             System.err.println("Opened document: $uri")
-            System.err.println("Parsing declarative model for document: $uri")
-
-            val file = File(URI.create(uri))
-            val fileSchema = schemaEvaluator.evaluate(file.name, file.readText())
-            val settingsSchema = schemaEvaluator.evaluate(
-                resources.settingsFile.name, resources.settingsFile.readText()
-            )
-
-            System.err.println("Parsed declarative model for document: $uri")
-            AnalysisDocumentUtils.documentWithConventions(settingsSchema, fileSchema)?.let {
-                domStore[uri] = it.document
-            }
-
+            val text = File(uri).readText()
+            documentStore.storeInitial(uri, parse(uri, text))
             System.err.println("Stored declarative model for document: $uri")
         }
     }
 
     override fun didChange(params: DidChangeTextDocumentParams?) {
-        System.err.println("Changed document: ${params?.textDocument?.uri}")
+        params?.let { nonNullParams ->
+            val uri = URI(nonNullParams.textDocument.uri)
+            nonNullParams.contentChanges.forEach { change ->
+                documentStore.storeVersioned(
+                    uri,
+                    nonNullParams.textDocument.version,
+                    parse(uri, change.text)
+                )
+            }
+            System.err.println("Changed document: ${params.textDocument?.uri}")
+        }
     }
 
     override fun didClose(params: DidCloseTextDocumentParams?) {
@@ -68,7 +72,8 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
 
     override fun hover(params: HoverParams?): CompletableFuture<Hover> {
         val hover = params?.let { nonNullParams ->
-            withDom(nonNullParams.textDocument) { dom ->
+            val uri = URI(nonNullParams.textDocument.uri)
+            withDom(uri) { dom ->
                 val position = nonNullParams.position
 
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
@@ -106,20 +111,34 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
 
     override fun foldingRange(params: FoldingRangeRequestParams?): CompletableFuture<MutableList<FoldingRange>> {
         System.err.println("Asking for folding ranges")
-        val foldingRanges = withDom(params?.textDocument) { dom ->
-            val visitor = FoldingRangeVisitor()
-            dom.visit(visitor)
-            visitor.foldingRanges
+        params?.let { nonNullParams ->
+            val uri = URI(nonNullParams.textDocument.uri)
+            val foldingRanges = withDom(uri) { dom ->
+                val visitor = FoldingRangeVisitor()
+                dom.visit(visitor)
+                visitor.foldingRanges
+            }
+            return CompletableFuture.completedFuture(foldingRanges)
         }
-        return CompletableFuture.completedFuture(foldingRanges)
+        return CompletableFuture.completedFuture(mutableListOf())
     }
 
-    private fun <T> withDom(textDocument: TextDocumentIdentifier?, work: (DeclarativeDocument) -> T): T? =
-        textDocument?.uri?.let {
-            val dom = domStore[it]
-            dom?.let {
-                work.invoke(dom)
-            }
-        }
+    // Utility and other member functions -------------------------------------
 
+    private fun parse(uri: URI, text: String): DeclarativeDocument {
+        val fileName = uri.path.substringAfterLast('/')
+        val fileSchema = schemaEvaluator.evaluate(fileName, text)
+        val settingsSchema = schemaEvaluator.evaluate(
+            resources.settingsFile.name, resources.settingsFile.readText()
+        )
+
+        System.err.println("Parsed declarative model for document: $uri")
+        return AnalysisDocumentUtils.documentWithConventions(settingsSchema, fileSchema)!!.document
+    }
+
+    private fun <T> withDom(uri: URI, work: (DeclarativeDocument) -> T): T? {
+        return documentStore[uri]?.let { document ->
+            work(document)
+        }
+    }
 }

@@ -6,9 +6,11 @@ plugins {
 
 dependencies {
     implementation(project(":model"))
+
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.core.jvm)
     implementation(libs.lsp4j)
+    implementation(libs.logback.classic)
     implementation(libs.gradle.tooling.api)
     implementation(libs.gradle.declarative.dsl.core)
     implementation(libs.gradle.declarative.dsl.evaluator)

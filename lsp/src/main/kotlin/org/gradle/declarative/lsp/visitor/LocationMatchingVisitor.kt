@@ -1,4 +1,4 @@
-package org.gradle.declarative.lsp.modelutils
+package org.gradle.declarative.lsp.visitor
 
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 

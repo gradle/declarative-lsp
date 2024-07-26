@@ -1,9 +1,11 @@
-package org.gradle.declarative.lsp.modelutils
+package org.gradle.declarative.lsp.visitor
 
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentNodeContainer
 
-
+/**
+ * Classic visitor for visiting nodes in a DeclarativeDocument.
+ */
 open class DocumentNodeVisitor {
 
     open fun visitNode(node: DeclarativeDocument.Node) {}
@@ -23,7 +25,10 @@ open class DocumentNodeVisitor {
     open fun visitValueFactoryNode(node: DeclarativeDocument.ValueNode.ValueFactoryNode) {}
 }
 
-// Extend the DocumentNode with a visitor pattern
+/**
+ * Extension function to visit all nodes in a DeclarativeDocument.
+ * In order to use this, implement a subclass of [DocumentNodeVisitor] and override the methods you need to do the analysis.
+ */
 fun DeclarativeDocument.visit(visitor: DocumentNodeVisitor) {
     // Initialize the list of nodes to visit with the root nodes of the forest
     val nodesToVisit = this.content.toMutableList()

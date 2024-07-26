@@ -1,8 +1,8 @@
-package org.gradle.declarative.lsp.server
+package org.gradle.declarative.lsp
 
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.services.*
-import org.gradle.declarative.lsp.tooling.ConnectionHandler
+import org.gradle.declarative.lsp.tapi.ConnectionHandler
 import java.io.File
 import java.net.URI
 import java.util.concurrent.CompletableFuture
@@ -33,7 +33,7 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         val serverCapabilities = ServerCapabilities()
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
         serverCapabilities.setHoverProvider(true)
-        serverCapabilities.setFoldingRangeProvider(true)
+//        serverCapabilities.setFoldingRangeProvider(true)
 
         val workspaceFolder = params!!.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))

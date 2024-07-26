@@ -1,4 +1,4 @@
-package org.gradle.declarative.lsp.modelutils
+package org.gradle.declarative.lsp.visitor
 
 import org.eclipse.lsp4j.FoldingRange
 import org.eclipse.lsp4j.FoldingRangeKind
@@ -12,7 +12,7 @@ class FoldingRangeVisitor: DocumentNodeVisitor() {
         val range = FoldingRange(
             // 1-based to 0-based
             node.sourceData.lineRange.first - 1,
-            // 1-based to 0-based, but DCL is inclusive and LSP is exclusive (hence nothing)
+            // 1-based to 0-based, but DCL is inclusive and LSP is exclusive (hence we subtract 0)
             node.sourceData.lineRange.last,
         ).apply {
             kind = FoldingRangeKind.Region

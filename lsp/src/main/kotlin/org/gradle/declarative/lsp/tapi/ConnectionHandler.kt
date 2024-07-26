@@ -1,4 +1,4 @@
-package org.gradle.declarative.lsp.tooling
+package org.gradle.declarative.lsp.tapi
 
 import org.gradle.declarative.lsp.build.action.GetDeclarativeResourcesModel
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel

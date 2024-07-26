@@ -2,7 +2,8 @@ package org.gradle.declarative.lsp.storage
 
 import io.mockk.mockk
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 

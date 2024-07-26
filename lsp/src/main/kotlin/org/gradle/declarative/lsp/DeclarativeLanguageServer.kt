@@ -1,7 +1,16 @@
 package org.gradle.declarative.lsp
 
-import org.eclipse.lsp4j.*
-import org.eclipse.lsp4j.services.*
+import org.eclipse.lsp4j.InitializeParams
+import org.eclipse.lsp4j.InitializeResult
+import org.eclipse.lsp4j.ServerCapabilities
+import org.eclipse.lsp4j.SetTraceParams
+import org.eclipse.lsp4j.TextDocumentSyncKind
+import org.eclipse.lsp4j.TraceValue
+import org.eclipse.lsp4j.services.LanguageClient
+import org.eclipse.lsp4j.services.LanguageClientAware
+import org.eclipse.lsp4j.services.LanguageServer
+import org.eclipse.lsp4j.services.TextDocumentService
+import org.eclipse.lsp4j.services.WorkspaceService
 import org.gradle.declarative.lsp.tapi.ConnectionHandler
 import java.io.File
 import java.net.URI

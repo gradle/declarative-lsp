@@ -1,13 +1,21 @@
 package org.gradle.declarative.lsp
 
-import org.eclipse.lsp4j.*
+import org.eclipse.lsp4j.DidChangeTextDocumentParams
+import org.eclipse.lsp4j.DidCloseTextDocumentParams
+import org.eclipse.lsp4j.DidOpenTextDocumentParams
+import org.eclipse.lsp4j.DidSaveTextDocumentParams
+import org.eclipse.lsp4j.Hover
+import org.eclipse.lsp4j.HoverParams
+import org.eclipse.lsp4j.MarkupContent
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
+import org.gradle.declarative.lsp.storage.VersionedDocumentStore
 import org.gradle.declarative.lsp.visitor.LocationMatchingVisitor
 import org.gradle.declarative.lsp.visitor.visit
-import org.gradle.declarative.lsp.storage.VersionedDocumentStore
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator

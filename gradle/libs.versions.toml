@@ -2,6 +2,7 @@
 # https://docs.gradle.org/current/userguide/platforms.html#sub::toml-dependencies-format
 
 [versions]
+detekt = "1.23.6"
 lsp4j = "0.23.1"
 logback = "1.5.6"
 kotlin = "2.0.0"
@@ -22,4 +23,5 @@ gradle-declarative-dsl-tooling-models = { module = "org.gradle:gradle-declarativ
 gradle-declarative-dsl-tooling-builders = { module = "org.gradle:gradle-declarative-dsl-tooling-builders", version.ref = "declarative-dsl" }
 
 [plugins]
-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }

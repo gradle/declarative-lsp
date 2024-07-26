@@ -1,7 +1,8 @@
 import org.gradle.declarative.buildlogic.ClasspathWriter
 
 plugins {
-    alias(libs.plugins.jvm)
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.detekt)
 }
 
 dependencies {

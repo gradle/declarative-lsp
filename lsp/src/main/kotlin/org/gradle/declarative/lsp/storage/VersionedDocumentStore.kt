@@ -48,6 +48,10 @@ class VersionedDocumentStore {
         // If we reach this point, the document was not stored
         return false
     }
+
+    fun remove(uri: URI) {
+        store.remove(uri)
+    }
 }
 
 sealed class DocumentStoreEntry {

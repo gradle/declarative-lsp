@@ -36,11 +36,11 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     private val availableMutations = listOf(
         AddDependency()
     )
-    private val applicableMutations: List<MutationApplicability> = mutableListOf()
 
     private lateinit var client: LanguageClient
     private lateinit var resources: ResolvedDeclarativeResourcesModel
     private lateinit var schemaEvaluator: SimpleAnalysisEvaluator
+    private var applicableMutations: List<MutationApplicability> = emptyList()
 
     override fun connect(client: LanguageClient?) {
         this.client = client!!
@@ -56,34 +56,36 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 
     override fun didOpen(params: DidOpenTextDocumentParams?) {
-        params?.textDocument?.uri?.let { uri ->
-            URI(uri)
-        }?.let { uri ->
-            LOGGER.trace("Opened document: {}", uri)
+        params?.let {
+            LOGGER.trace("Opened document: {}", it.textDocument.uri)
+
+            val uri = URI(it.textDocument.uri)
             val text = File(uri).readText()
             documentStore.storeInitial(uri, parse(uri, text))
-            LOGGER.trace("Stored declarative model for document: {}", uri)
-
             processDocument(uri)
         }
     }
 
     override fun didChange(params: DidChangeTextDocumentParams?) {
-        params?.let { nonNullParams ->
-            val uri = URI(nonNullParams.textDocument.uri)
-            nonNullParams.contentChanges.forEach { change ->
+        params?.let {
+            LOGGER.trace("Changed document: ${params.textDocument.uri}")
+            val uri = URI(it.textDocument.uri)
+            it.contentChanges.forEach { change ->
                 documentStore.storeVersioned(
                     uri,
-                    nonNullParams.textDocument.version,
+                    it.textDocument.version,
                     parse(uri, change.text)
                 )
                 processDocument(uri)
             }
-            LOGGER.trace("Changed document: ${params.textDocument?.uri}")
         }
     }
 
     override fun didClose(params: DidCloseTextDocumentParams?) {
+        params?.let {
+            val uri = URI(it.textDocument.uri)
+            documentStore.remove(uri)
+        }
         LOGGER.trace("Closed document: ${params?.textDocument?.uri}")
     }
 
@@ -92,10 +94,10 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 
     override fun hover(params: HoverParams?): CompletableFuture<Hover> {
-        val hover = params?.let { nonNullParams ->
-            val uri = URI(nonNullParams.textDocument.uri)
+        val hover = params?.let {
+            val uri = URI(it.textDocument.uri)
             withDom(uri) { dom ->
-                val position = nonNullParams.position
+                val position = it.position
 
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
                 val visitor = LocationMatchingVisitor(position.line + 1, position.character + 1)
@@ -131,15 +133,8 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 
     override fun codeAction(params: CodeActionParams?): CompletableFuture<MutableList<Either<Command, CodeAction>>> {
-        params?.let { nonNullParams ->
-            val uri = URI(nonNullParams.textDocument.uri)
-            withDom(uri) { dom ->
-                val mac = MutationApplicabilityChecker(resources.analysisSchema, dom.result)
-                availableMutations.forEach { mutation ->
-                    val applicability = mac.checkApplicability(mutation)
-                    LOGGER.info("Applicability: {}", applicability)
-                }
-            }
+        params?.let {
+            // TODO: finish this
         }
 
         return CompletableFuture.completedFuture(null)
@@ -147,8 +142,15 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
 
     // Common processing -----------------------------------------------------------------------------------------------
 
-    private fun processDocument(uri: URI) = withDom(uri) {
+    private fun processDocument(uri: URI) = withDom(uri) { dom ->
+        applicableMutations = processMutationApplications(dom)
+    }
 
+    private fun processMutationApplications(dom: DocumentOverlayResult): List<MutationApplicability> {
+        val mac = MutationApplicabilityChecker(resources.analysisSchema, dom.result)
+        return availableMutations.flatMap { mutation ->
+            mac.checkApplicability(mutation)
+        }
     }
 
     // Utility and other member functions ------------------------------------------------------------------------------

@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import org.gradle.declarative.buildlogic.ClasspathWriter
-
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.detekt)

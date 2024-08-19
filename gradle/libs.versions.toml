@@ -10,6 +10,7 @@ kotlinx-coroutines = "1.8.1"
 gradle-tooling = "+"
 declarative-dsl = "+"
 mockk = "1.13.12"
+shadow = "8.3.0"
 
 [libraries]
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
@@ -27,3 +28,4 @@ mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

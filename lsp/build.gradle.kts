@@ -19,6 +19,7 @@ import org.gradle.declarative.buildlogic.ClasspathWriter
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.shadow)
 }
 
 dependencies {
@@ -51,16 +52,5 @@ testing {
             }
             useKotlinTest("2.0.0")
         }
-    }
-}
-
-tasks {
-    val writeRuntimeClasspath by registering(ClasspathWriter::class) {
-        group = "build"
-        description = "Write the runtime classpath to a file"
-    }
-
-    val jar by getting {
-        finalizedBy(writeRuntimeClasspath)
     }
 }

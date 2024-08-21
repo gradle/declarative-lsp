@@ -23,9 +23,7 @@ import org.eclipse.lsp4j.DidSaveTextDocumentParams
 import org.eclipse.lsp4j.Hover
 import org.eclipse.lsp4j.HoverParams
 import org.eclipse.lsp4j.MarkupContent
-import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.PublishDiagnosticsParams
-import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
@@ -130,15 +128,18 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 
 
-    // Common processing -----------------------------------------------------------------------------------------------
+    // Documentation processing ----------------------------------------------------------------------------------------
 
     private fun processDocument(uri: URI) = withDom(uri) { dom ->
-        processErrors(uri, dom)
+        reportSyntaxErrors(uri, dom)
     }
 
-    private fun processErrors(uri: URI, dom: DocumentOverlayResult) {
+    /**
+     * Publishes the syntax errors (or the lack thereof) for the given document as LSP diagnostics.
+     */
+    private fun reportSyntaxErrors(uri: URI, dom: DocumentOverlayResult) {
         val diagnostics = dom.document.visit(ErrorToDiagnosticVisitor()).diagnostics
-        LOGGER.trace("Publishing diagnostics for document: {}", uri)
+        LOGGER.trace("Found syntax errors in document {}: {}", uri, diagnostics)
         client.publishDiagnostics(
             PublishDiagnosticsParams(
                 uri.toString(),

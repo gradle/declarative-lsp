@@ -21,7 +21,6 @@ import org.gradle.internal.declarativedsl.dom.DocumentNodeContainer
 
 /**
  * Classic visitor for visiting nodes in a DeclarativeDocument.
- * The subclasses are designed to
  */
 open class DocumentNodeVisitor {
 

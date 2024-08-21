@@ -17,11 +17,13 @@
 package org.gradle.declarative.lsp.storage
 
 import io.mockk.mockk
+import org.gradle.declarative.lsp.VersionedDocumentStore
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.net.URI
 
 class VersionedDocumentStoreTest {
 
@@ -97,7 +99,7 @@ class VersionedDocumentStoreTest {
     }
 
     companion object {
-        val TEST_URI = java.net.URI.create("file:///test")
+        val TEST_URI = URI.create("file:///test")
 
         private val STORED_DOM = mockk<DocumentOverlayResult>()
         private val NEW_DOM = mockk<DocumentOverlayResult>()

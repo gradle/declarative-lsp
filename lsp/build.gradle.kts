@@ -40,15 +40,24 @@ detekt {
     config.convention(project.isolated.rootProject.projectDirectory.file("gradle/detekt.yml"))
 }
 
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(8))
+    }
+}
+
 testing {
     suites {
         val test by getting(JvmTestSuite::class) {
-            java {
-                toolchain {
-                    languageVersion.set(JavaLanguageVersion.of(17))
-                }
-            }
             useKotlinTest("2.0.0")
+        }
+    }
+}
+
+tasks {
+    shadowJar {
+        manifest {
+            attributes["Main-Class"] = "org.gradle.declarative.lsp.MainKt"
         }
     }
 }

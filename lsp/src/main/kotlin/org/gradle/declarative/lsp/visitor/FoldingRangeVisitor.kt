@@ -20,6 +20,9 @@ import org.eclipse.lsp4j.FoldingRange
 import org.eclipse.lsp4j.FoldingRangeKind
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 
+/**
+ * Visitor finding and
+ */
 class FoldingRangeVisitor: DocumentNodeVisitor() {
 
     val foldingRanges: MutableList<FoldingRange> = mutableListOf()

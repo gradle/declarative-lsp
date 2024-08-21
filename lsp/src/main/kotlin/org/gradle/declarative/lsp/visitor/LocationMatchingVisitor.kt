@@ -21,11 +21,11 @@ import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 /**
  * Visitor capable of finding the node in a document that matches a given cursor position.
  */
-class LocationMatchingVisitor(val line: Int, val column: Int) : DocumentNodeVisitor() {
+class LocationMatchingVisitor(private val line: Int, private val column: Int) : DocumentNodeVisitor() {
 
-    var matchingNode: DeclarativeDocument.Node? = null
+    var matchingNode: DeclarativeDocument.DocumentNode? = null
 
-    override fun visitNode(node: DeclarativeDocument.Node) {
+    override fun visitDocumentNode(node: DeclarativeDocument.DocumentNode) {
         if (isPositionInNode(node, line, column)) {
             matchingNode = node
         }

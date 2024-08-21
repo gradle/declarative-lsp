@@ -21,6 +21,7 @@ import org.gradle.internal.declarativedsl.dom.DocumentNodeContainer
 
 /**
  * Classic visitor for visiting nodes in a DeclarativeDocument.
+ * The subclasses are designed to
  */
 open class DocumentNodeVisitor {
 
@@ -47,7 +48,7 @@ open class DocumentNodeVisitor {
  * In order to use this, implement a subclass of [DocumentNodeVisitor]
  * and override the methods you need to do the analysis.
  */
-fun DeclarativeDocument.visit(visitor: DocumentNodeVisitor) {
+fun <T: DocumentNodeVisitor> DeclarativeDocument.visit(visitor: T): T {
     // Initialize the list of nodes to visit with the root nodes of the forest
     val nodesToVisit = this.content.toMutableList()
 
@@ -59,14 +60,6 @@ fun DeclarativeDocument.visit(visitor: DocumentNodeVisitor) {
             nodesToVisit.addAll(node.content)
         }
         when (node) {
-            is DeclarativeDocument.DocumentNode -> {
-                visitor.visitDocumentNode(node)
-                when (node) {
-                    is DeclarativeDocument.DocumentNode.ElementNode -> visitor.visitDocumentElementNode(node)
-                    is DeclarativeDocument.DocumentNode.ErrorNode -> visitor.visitDocumentErrorNode(node)
-                    is DeclarativeDocument.DocumentNode.PropertyNode -> visitor.visitDocumentPropertyNode(node)
-                }
-            }
             is DeclarativeDocument.ValueNode -> {
                 visitor.visitValueNode(node)
                 when (node) {
@@ -75,6 +68,16 @@ fun DeclarativeDocument.visit(visitor: DocumentNodeVisitor) {
                     else -> {}
                 }
             }
+            is DeclarativeDocument.DocumentNode -> {
+                visitor.visitDocumentNode(node)
+                when (node) {
+                    is DeclarativeDocument.DocumentNode.ElementNode -> visitor.visitDocumentElementNode(node)
+                    is DeclarativeDocument.DocumentNode.ErrorNode -> visitor.visitDocumentErrorNode(node)
+                    is DeclarativeDocument.DocumentNode.PropertyNode -> visitor.visitDocumentPropertyNode(node)
+                }
+            }
         }
     }
+
+    return visitor
 }

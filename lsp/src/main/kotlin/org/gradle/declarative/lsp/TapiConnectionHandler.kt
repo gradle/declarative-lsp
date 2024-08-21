@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.tapi
+package org.gradle.declarative.lsp
 
 import org.gradle.declarative.lsp.build.action.GetDeclarativeResourcesModel
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
@@ -22,7 +22,7 @@ import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.ProjectConnection
 import java.io.File
 
-class ConnectionHandler(val projectRoot: File) {
+class TapiConnectionHandler(val projectRoot: File) {
     fun getDomPrequisites(): ResolvedDeclarativeResourcesModel {
         var connection: ProjectConnection? = null
         try {

@@ -27,7 +27,6 @@ import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.eclipse.lsp4j.services.WorkspaceService
-import org.gradle.declarative.lsp.tapi.ConnectionHandler
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URI
@@ -57,14 +56,14 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
 
     override fun initialize(params: InitializeParams?): CompletableFuture<InitializeResult> {
         val serverCapabilities = ServerCapabilities()
+        // Here we set the capabilities we support
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
         serverCapabilities.setHoverProvider(true)
-        serverCapabilities.setCodeActionProvider(true)
 
         val workspaceFolder = params!!.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))
         LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
-        ConnectionHandler(workspaceFolderFile).let {
+        TapiConnectionHandler(workspaceFolderFile).let {
             val declarativeBuildModel = it.getDomPrequisites()
             textDocumentService.setResources(declarativeBuildModel)
         }

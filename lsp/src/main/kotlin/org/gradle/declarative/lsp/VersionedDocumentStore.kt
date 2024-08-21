@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.storage
+package org.gradle.declarative.lsp
 
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
+import org.slf4j.LoggerFactory
 import java.net.URI
 
 /**
@@ -68,11 +69,15 @@ class VersionedDocumentStore {
     fun remove(uri: URI) {
         store.remove(uri)
     }
-}
 
-sealed class DocumentStoreEntry {
-    abstract val document: DocumentOverlayResult
+    companion object {
+        private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::class.java)
+    }
 
-    data class Initial(override val document: DocumentOverlayResult) : DocumentStoreEntry()
-    data class Versioned(val version: Int, override val document: DocumentOverlayResult) : DocumentStoreEntry()
+    sealed class DocumentStoreEntry {
+        abstract val document: DocumentOverlayResult
+
+        data class Initial(override val document: DocumentOverlayResult) : DocumentStoreEntry()
+        data class Versioned(val version: Int, override val document: DocumentOverlayResult) : DocumentStoreEntry()
+    }
 }

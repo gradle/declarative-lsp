@@ -132,6 +132,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
 
     private fun processDocument(uri: URI) = withDom(uri) { dom ->
         reportSyntaxErrors(uri, dom)
+        reportSemanticErrors(uri, dom)
     }
 
     /**
@@ -143,10 +144,18 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         client.publishDiagnostics(
             PublishDiagnosticsParams(
                 uri.toString(),
-                // Can be empty, which means that we have no errors
+                // Can be empty, which means to the client that there are no diagnostics (i.e. errors, warnings, etc.)
+                // Otherwise, the client won't clear the previously sent diagnostic
                 diagnostics
             )
         )
+    }
+
+    /**
+     * Publishes the semantic errors (or the lack thereof) for the given document as LSP diagnostics.
+     */
+    private fun reportSemanticErrors(uri: URI, dom: DocumentOverlayResult) {
+
     }
 
     // Utility and other member functions ------------------------------------------------------------------------------

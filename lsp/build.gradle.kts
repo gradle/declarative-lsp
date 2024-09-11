@@ -36,8 +36,9 @@ dependencies {
 }
 
 detekt {
-    // overwrite the config file's location
-    config.convention(project.isolated.rootProject.projectDirectory.file("gradle/detekt.yml"))
+    config.convention(
+        project.isolated.rootProject.projectDirectory.file("gradle/detekt.yml")
+    )
 }
 
 java {

@@ -26,6 +26,8 @@ open class DocumentNodeVisitor {
 
     open fun visitNode(node: DeclarativeDocument.Node) {}
 
+    open fun visitDocumentNodeContainer(node: DocumentNodeContainer) {}
+
     open fun visitDocumentNode(node: DeclarativeDocument.DocumentNode) {}
 
     open fun visitDocumentElementNode(node: DeclarativeDocument.DocumentNode.ElementNode) {}
@@ -57,6 +59,9 @@ fun <T: DocumentNodeVisitor> DeclarativeDocument.visit(visitor: T): T {
             nodesToVisit.addAll(node.content)
         }
         when (node) {
+            is DocumentNodeContainer -> {
+                visitor.visitDocumentNodeContainer(node)
+            }
             is DeclarativeDocument.ValueNode -> {
                 visitor.visitValueNode(node)
                 when (node) {

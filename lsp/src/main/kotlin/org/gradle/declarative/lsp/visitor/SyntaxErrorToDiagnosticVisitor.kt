@@ -29,9 +29,9 @@ import org.gradle.internal.declarativedsl.dom.UnsupportedSyntax
 import org.gradle.internal.declarativedsl.language.SourceData
 
 /**
- * Visitor finding the error nodes in a document.
+ * Visitor finding _syntax_ error nodes in a document.
  */
-class ErrorToDiagnosticVisitor : DocumentNodeVisitor() {
+class SyntaxErrorToDiagnosticVisitor : DocumentNodeVisitor() {
 
     val diagnostics: MutableList<Diagnostic> = mutableListOf()
 

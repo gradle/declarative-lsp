@@ -16,6 +16,9 @@
 
 package org.gradle.declarative.lsp
 
+import org.eclipse.lsp4j.CompletionItem
+import org.eclipse.lsp4j.CompletionList
+import org.eclipse.lsp4j.CompletionParams
 import org.eclipse.lsp4j.DidChangeTextDocumentParams
 import org.eclipse.lsp4j.DidCloseTextDocumentParams
 import org.eclipse.lsp4j.DidOpenTextDocumentParams
@@ -24,13 +27,16 @@ import org.eclipse.lsp4j.Hover
 import org.eclipse.lsp4j.HoverParams
 import org.eclipse.lsp4j.MarkupContent
 import org.eclipse.lsp4j.PublishDiagnosticsParams
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
-import org.gradle.declarative.lsp.visitor.ErrorToDiagnosticVisitor
+import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.LocationMatchingVisitor
+import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.visit
+import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
@@ -108,9 +114,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
 
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
                 val visitor = LocationMatchingVisitor(position.line + 1, position.character + 1)
-                dom.document.visit(visitor)
-
-                visitor.matchingNode?.let { node ->
+                dom.document.visit(visitor).matchingNode?.let { node ->
                     when (node) {
                         is DeclarativeDocument.DocumentNode.PropertyNode -> node.name
                         is DeclarativeDocument.DocumentNode.ElementNode -> node.name
@@ -127,8 +131,12 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         return CompletableFuture.completedFuture(hover)
     }
 
+    override fun completion(position: CompletionParams?): CompletableFuture<Either<MutableList<CompletionItem>, CompletionList>> {
+        SchemaTypeRefContext(resources.analysisSchema)
+        TODO()
+    }
 
-    // Documentation processing ----------------------------------------------------------------------------------------
+    // Utility and other member functions ------------------------------------------------------------------------------
 
     private fun processDocument(uri: URI) = withDom(uri) { dom ->
         reportSyntaxErrors(uri, dom)
@@ -139,7 +147,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
      * Publishes the syntax errors (or the lack thereof) for the given document as LSP diagnostics.
      */
     private fun reportSyntaxErrors(uri: URI, dom: DocumentOverlayResult) {
-        val diagnostics = dom.document.visit(ErrorToDiagnosticVisitor()).diagnostics
+        val diagnostics = dom.document.visit(SyntaxErrorToDiagnosticVisitor()).diagnostics
         LOGGER.trace("Found syntax errors in document {}: {}", uri, diagnostics)
         client.publishDiagnostics(
             PublishDiagnosticsParams(
@@ -155,10 +163,17 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
      * Publishes the semantic errors (or the lack thereof) for the given document as LSP diagnostics.
      */
     private fun reportSemanticErrors(uri: URI, dom: DocumentOverlayResult) {
-
+        val diagnostics = dom.document.visit(SemanticErrorToDiagnosticVisitor(dom.overlayResolutionContainer)).diagnostics
+        LOGGER.trace("Found semantic errors in document {}: {}", uri, diagnostics)
+        client.publishDiagnostics(
+            PublishDiagnosticsParams(
+                uri.toString(),
+                // Can be empty, which means to the client that there are no diagnostics (i.e. errors, warnings, etc.)
+                // Otherwise, the client won't clear the previously sent diagnostic
+                diagnostics
+            )
+        )
     }
-
-    // Utility and other member functions ------------------------------------------------------------------------------
 
     private fun parse(uri: URI, text: String): DocumentOverlayResult {
         val fileName = uri.path.substringAfterLast('/')

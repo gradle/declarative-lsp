@@ -18,7 +18,6 @@ package org.gradle.declarative.lsp.visitor
 
 import org.eclipse.lsp4j.Diagnostic
 import org.gradle.declarative.lsp.toLspRange
-import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.*
 import org.gradle.internal.declarativedsl.dom.data.data
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer

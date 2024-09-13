@@ -17,16 +17,27 @@
 package org.gradle.declarative.lsp.visitor
 
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
+import org.gradle.internal.declarativedsl.dom.DeclarativeDocument.DocumentNode
+import org.gradle.internal.declarativedsl.dom.DocumentNodeContainer
 
 /**
  * Visitor capable of finding the node in a document that matches a given cursor position.
  */
-class LocationMatchingVisitor(private val line: Int, private val column: Int) : DocumentNodeVisitor() {
+class LocationMatchingVisitor(
+    private val line: Int,
+    private val column: Int,
+) : DocumentNodeVisitor() {
 
-    var matchingNode: DeclarativeDocument.DocumentNode? = null
+    /** The closest container to the cursor position. */
+    var closestContainer: DocumentNodeContainer? = null
+    /** The node best-fitting the cursor position. */
+    var matchingNode: DocumentNode? = null
 
-    override fun visitDocumentNode(node: DeclarativeDocument.DocumentNode) {
+    override fun visitDocumentNode(node: DocumentNode) {
         if (isPositionInNode(node, line, column)) {
+            if (node is DocumentNodeContainer) {
+                closestContainer = node
+            }
             matchingNode = node
         }
     }

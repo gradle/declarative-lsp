@@ -58,10 +58,11 @@ fun <T: DocumentNodeVisitor> DeclarativeDocument.visit(visitor: T): T {
         if (node is DocumentNodeContainer) {
             nodesToVisit.addAll(node.content)
         }
+
+        if (node is DocumentNodeContainer) {
+            visitor.visitDocumentNodeContainer(node)
+        }
         when (node) {
-            is DocumentNodeContainer -> {
-                visitor.visitDocumentNodeContainer(node)
-            }
             is DeclarativeDocument.ValueNode -> {
                 visitor.visitValueNode(node)
                 when (node) {

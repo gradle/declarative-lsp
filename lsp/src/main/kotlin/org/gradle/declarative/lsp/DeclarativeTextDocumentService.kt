@@ -16,26 +16,13 @@
 
 package org.gradle.declarative.lsp
 
-import org.eclipse.lsp4j.CompletionItem
-import org.eclipse.lsp4j.CompletionList
-import org.eclipse.lsp4j.CompletionParams
-import org.eclipse.lsp4j.DidChangeTextDocumentParams
-import org.eclipse.lsp4j.DidCloseTextDocumentParams
-import org.eclipse.lsp4j.DidOpenTextDocumentParams
-import org.eclipse.lsp4j.DidSaveTextDocumentParams
-import org.eclipse.lsp4j.Hover
-import org.eclipse.lsp4j.HoverParams
-import org.eclipse.lsp4j.MarkupContent
-import org.eclipse.lsp4j.PublishDiagnosticsParams
+import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
-import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
-import org.gradle.declarative.lsp.visitor.LocationMatchingVisitor
-import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
-import org.gradle.declarative.lsp.visitor.visit
+import org.gradle.declarative.lsp.visitor.*
 import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
@@ -132,8 +119,19 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 
     override fun completion(position: CompletionParams?): CompletableFuture<Either<MutableList<CompletionItem>, CompletionList>> {
-        SchemaTypeRefContext(resources.analysisSchema)
-        TODO()
+        LOGGER.trace("Completion requested for position: {}", position)
+        val completions = position?.let {
+            val uri = URI(it.textDocument.uri)
+            withDom(uri) { dom ->
+                dom.document.visit(
+                    CompletionOptionsVisitor(
+                        dom.overlayResolutionContainer,
+                        SchemaTypeRefContext(resources.analysisSchema)
+                    )
+                ).completions
+            }
+        }
+        return CompletableFuture.completedFuture(Either.forLeft(completions))
     }
 
     // Utility and other member functions ------------------------------------------------------------------------------
@@ -148,7 +146,9 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
      */
     private fun reportSyntaxErrors(uri: URI, dom: DocumentOverlayResult) {
         val diagnostics = dom.document.visit(SyntaxErrorToDiagnosticVisitor()).diagnostics
-        LOGGER.trace("Found syntax errors in document {}: {}", uri, diagnostics)
+        if (diagnostics.isNotEmpty()) {
+            LOGGER.trace("Found syntax errors in document {}: {}", uri, diagnostics)
+        }
         client.publishDiagnostics(
             PublishDiagnosticsParams(
                 uri.toString(),
@@ -163,8 +163,11 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
      * Publishes the semantic errors (or the lack thereof) for the given document as LSP diagnostics.
      */
     private fun reportSemanticErrors(uri: URI, dom: DocumentOverlayResult) {
-        val diagnostics = dom.document.visit(SemanticErrorToDiagnosticVisitor(dom.overlayResolutionContainer)).diagnostics
-        LOGGER.trace("Found semantic errors in document {}: {}", uri, diagnostics)
+        val diagnostics =
+            dom.document.visit(SemanticErrorToDiagnosticVisitor(dom.overlayResolutionContainer)).diagnostics
+        if (diagnostics.isNotEmpty()) {
+            LOGGER.trace("Found semantic errors in document {}: {}", uri, diagnostics)
+        }
         client.publishDiagnostics(
             PublishDiagnosticsParams(
                 uri.toString(),

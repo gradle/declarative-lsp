@@ -38,8 +38,8 @@ fun main() {
 
     // Start the language server
     val listening = launcher.startListening()
-    LOGGER.info("Gradle Declartive Language Server: started")
+    LOGGER.info("Gradle Declarative Language Server: started")
     // Wait until the language server is stopped
     listening.get()
-    LOGGER.info("Gradle Declartive Language Server: stopped")
+    LOGGER.info("Gradle Declarative Language Server: stopped")
 }

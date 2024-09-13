@@ -61,7 +61,7 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         }
 
         initialized = true
-        LOGGER.info("Gradle Declartive Language Server: initialized")
+        LOGGER.info("Gradle Declarative Language Server: initialized")
         return CompletableFuture.completedFuture(InitializeResult(serverCapabilities))
     }
 
@@ -75,12 +75,12 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
     }
 
     override fun getTextDocumentService(): TextDocumentService {
-        LOGGER.info("Gradle Declartive Language Server: getTextDocumentService")
+        LOGGER.info("Gradle Declarative Language Server: getTextDocumentService")
         return textDocumentService
     }
 
     override fun getWorkspaceService(): WorkspaceService {
-        LOGGER.info("Gradle Declartive Language Server: getWorkspaceService")
+        LOGGER.info("Gradle Declarative Language Server: getWorkspaceService")
         return workspaceService
     }
 

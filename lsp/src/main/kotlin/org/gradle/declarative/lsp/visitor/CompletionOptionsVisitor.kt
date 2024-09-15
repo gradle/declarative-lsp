@@ -50,7 +50,7 @@ class CompletionOptionsVisitor(
         if (resolutionData is SuccessfulElementResolution) {
             val elementTypeRef = resolutionData.elementType
             if (elementTypeRef is DataClass && !alreadyUsedTypes.contains(elementTypeRef)) {
-                elementTypeRef.properties.map {
+                elementTypeRef.properties.forEach {
                     val completion = CompletionItem(
                         it.name
                     ).apply {

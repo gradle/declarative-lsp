@@ -22,7 +22,7 @@ import org.gradle.internal.declarativedsl.dom.DocumentNodeContainer
 /**
  * Classic visitor for visiting nodes in a DeclarativeDocument.
  */
-open class DocumentNodeVisitor {
+open class DocumentVisitor {
 
     open fun visitNode(node: DeclarativeDocument.Node) {}
 
@@ -41,25 +41,30 @@ open class DocumentNodeVisitor {
     open fun visitValueLiteralNode(node: DeclarativeDocument.ValueNode.LiteralValueNode) {}
 
     open fun visitValueFactoryNode(node: DeclarativeDocument.ValueNode.ValueFactoryNode) {}
+
+    companion object {
+        fun DocumentNodeContainer.isBottomContainer(): Boolean = !this.content.any { (it is DocumentNodeContainer) }
+
+        fun DeclarativeDocument.Node.isInFocus() {
+
+        }
+    }
 }
 
 /**
  * Extension function to visit all nodes in a DeclarativeDocument.
- * In order to use this, implement a subclass of [DocumentNodeVisitor] and override the methods you need.
+ * In order to use this, implement a subclass of [DocumentVisitor] and override the methods you need.
  */
-fun <T: DocumentNodeVisitor> DeclarativeDocument.visit(visitor: T): T {
+fun <T : DocumentVisitor> DeclarativeDocument.visit(visitor: T): T {
     // Initialize the list of nodes to visit with the root nodes of the forest
     val nodesToVisit = this.content.toMutableList()
 
     while (nodesToVisit.isNotEmpty()) {
         val node = nodesToVisit.removeFirst()
-
         visitor.visitNode(node)
+
         if (node is DocumentNodeContainer) {
             nodesToVisit.addAll(node.content)
-        }
-
-        if (node is DocumentNodeContainer) {
             visitor.visitDocumentNodeContainer(node)
         }
         when (node) {

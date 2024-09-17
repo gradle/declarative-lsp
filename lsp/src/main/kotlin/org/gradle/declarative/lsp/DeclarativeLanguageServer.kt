@@ -17,6 +17,7 @@
 package org.gradle.declarative.lsp
 
 import org.eclipse.lsp4j.*
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.*
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -50,11 +51,12 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         // Here we set the capabilities we support
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
         serverCapabilities.setHoverProvider(true)
-        serverCapabilities.completionProvider = CompletionOptions(true, listOf())
+        serverCapabilities.completionProvider = CompletionOptions(false, listOf())
 
         val workspaceFolder = params!!.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))
         LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
+
         TapiConnectionHandler(workspaceFolderFile).let {
             val declarativeBuildModel = it.getDomPrequisites()
             textDocumentService.setResources(declarativeBuildModel)
@@ -91,6 +93,8 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(DeclarativeLanguageServer::class.java)
+
+        private const val MODEL_FETCH_PROGRESS_TOKEN = "modelFetchProgress"
     }
 
 }

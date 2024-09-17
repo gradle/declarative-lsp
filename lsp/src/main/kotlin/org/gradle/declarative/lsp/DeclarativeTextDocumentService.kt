@@ -16,15 +16,35 @@
 
 package org.gradle.declarative.lsp
 
-import org.eclipse.lsp4j.*
+import org.eclipse.lsp4j.CompletionItem
+import org.eclipse.lsp4j.CompletionItemKind
+import org.eclipse.lsp4j.CompletionList
+import org.eclipse.lsp4j.CompletionParams
+import org.eclipse.lsp4j.DidChangeTextDocumentParams
+import org.eclipse.lsp4j.DidCloseTextDocumentParams
+import org.eclipse.lsp4j.DidOpenTextDocumentParams
+import org.eclipse.lsp4j.DidSaveTextDocumentParams
+import org.eclipse.lsp4j.Hover
+import org.eclipse.lsp4j.HoverParams
+import org.eclipse.lsp4j.InsertReplaceEdit
+import org.eclipse.lsp4j.InsertTextFormat
+import org.eclipse.lsp4j.InsertTextMode
+import org.eclipse.lsp4j.MarkupContent
+import org.eclipse.lsp4j.PublishDiagnosticsParams
+import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
+import org.gradle.declarative.dsl.schema.DataClass
+import org.gradle.declarative.dsl.schema.FunctionSemantics
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
-import org.gradle.declarative.lsp.visitor.*
-import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
+import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
+import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
+import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
+import org.gradle.declarative.lsp.visitor.visit
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
+import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
@@ -100,7 +120,10 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                 val position = it.position
 
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
-                val visitor = LocationMatchingVisitor(position.line + 1, position.character + 1)
+                val visitor = BestFittingNodeVisitor(
+                    params.position,
+                    DeclarativeDocument.DocumentNode::class
+                )
                 dom.document.visit(visitor).matchingNode?.let { node ->
                     when (node) {
                         is DeclarativeDocument.DocumentNode.PropertyNode -> node.name
@@ -118,20 +141,76 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         return CompletableFuture.completedFuture(hover)
     }
 
-    override fun completion(position: CompletionParams?): CompletableFuture<Either<MutableList<CompletionItem>, CompletionList>> {
-        LOGGER.trace("Completion requested for position: {}", position)
-        val completions = position?.let {
+    override fun completion(params: CompletionParams?): CompletableFuture<Either<MutableList<CompletionItem>, CompletionList>> {
+        // TODO: Look at SchemaFunction.parameters
+
+        LOGGER.trace("Completion requested for position: {}", params)
+        val completions = params?.let {
             val uri = URI(it.textDocument.uri)
             withDom(uri) { dom ->
                 dom.document.visit(
-                    CompletionOptionsVisitor(
-                        dom.overlayResolutionContainer,
-                        SchemaTypeRefContext(resources.analysisSchema)
+                    BestFittingNodeVisitor(
+                        params.position,
+                        DeclarativeDocument.DocumentNode.ElementNode::class
                     )
-                ).completions
+                ).matchingNode?.let { node ->
+                    dom.overlayResolutionContainer.data(node).let { elementResolution ->
+                        val alreadyUsedProperty = node.content.mapNotNull { contentNode ->
+                            when (val contentType = dom.overlayResolutionContainer.data(contentNode)) {
+                                is DocumentResolution.PropertyResolution.PropertyAssignmentResolved -> {
+                                    contentType.property
+                                }
+                                else -> null
+                            }
+                        }
+
+                        when (elementResolution) {
+                            is DocumentResolution.ElementResolution.SuccessfulElementResolution -> {
+                                when (val elementType = elementResolution.elementType) {
+                                    is DataClass -> {
+                                        elementType.properties.filter { property ->
+                                            !alreadyUsedProperty.contains(property)
+                                        }.map { properties ->
+                                            CompletionItem(properties.name).apply {
+                                                kind = CompletionItemKind.Field
+                                            }
+                                        } + elementType.memberFunctions.map { function ->
+                                            CompletionItem(function.simpleName).apply {
+                                                kind = CompletionItemKind.Method
+                                                when (val functionSemantics = function.semantics) {
+                                                    is FunctionSemantics.ConfigureSemantics -> {
+                                                        when (functionSemantics.configureBlockRequirement) {
+                                                            is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Required -> {
+                                                                this.insertText = function.simpleName + " {\n\t$0\n}"
+                                                                this.insertTextFormat = InsertTextFormat.Snippet
+                                                            }
+                                                            else -> {}
+                                                        }
+                                                    }
+                                                    else -> {}
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else -> null
+                                }
+                            }
+
+                            else -> null
+                        }
+                    }
+                }
             }
-        }
+        }.orEmpty().toMutableList()
         return CompletableFuture.completedFuture(Either.forLeft(completions))
+    }
+
+    private fun computePropertyCompletions(node: DeclarativeDocument.DocumentNode.ElementNode): List<CompletionItem> {
+        TODO()
+    }
+
+    private fun computeFunctionCompletions(node: DeclarativeDocument.DocumentNode.ElementNode): List<CompletionItem> {
+        TODO()
     }
 
     // Utility and other member functions ------------------------------------------------------------------------------

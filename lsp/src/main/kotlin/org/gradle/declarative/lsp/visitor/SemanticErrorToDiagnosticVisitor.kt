@@ -22,7 +22,7 @@ import org.gradle.internal.declarativedsl.dom.*
 import org.gradle.internal.declarativedsl.dom.data.data
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
 
-class SemanticErrorToDiagnosticVisitor(private val documentOverlayResult: DocumentResolutionContainer): DocumentNodeVisitor() {
+class SemanticErrorToDiagnosticVisitor(private val documentOverlayResult: DocumentResolutionContainer): DocumentVisitor() {
 
     val diagnostics: MutableList<Diagnostic> = mutableListOf()
 

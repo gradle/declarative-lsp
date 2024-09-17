@@ -23,7 +23,7 @@ import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 /**
  * Visitor finding and
  */
-class FoldingRangeVisitor: DocumentNodeVisitor() {
+class FoldingRangeVisitor: DocumentVisitor() {
 
     val foldingRanges: MutableList<FoldingRange> = mutableListOf()
 

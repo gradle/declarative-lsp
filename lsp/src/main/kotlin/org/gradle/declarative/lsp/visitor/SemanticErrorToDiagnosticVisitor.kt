@@ -18,7 +18,19 @@ package org.gradle.declarative.lsp.visitor
 
 import org.eclipse.lsp4j.Diagnostic
 import org.gradle.declarative.lsp.toLspRange
-import org.gradle.internal.declarativedsl.dom.*
+import org.gradle.internal.declarativedsl.dom.AmbiguousName
+import org.gradle.internal.declarativedsl.dom.BlockMismatch
+import org.gradle.internal.declarativedsl.dom.CrossScopeAccess
+import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
+import org.gradle.internal.declarativedsl.dom.DocumentResolution
+import org.gradle.internal.declarativedsl.dom.IsError
+import org.gradle.internal.declarativedsl.dom.NotAssignable
+import org.gradle.internal.declarativedsl.dom.ResolutionFailureReason
+import org.gradle.internal.declarativedsl.dom.UnresolvedBase
+import org.gradle.internal.declarativedsl.dom.UnresolvedName
+import org.gradle.internal.declarativedsl.dom.UnresolvedSignature
+import org.gradle.internal.declarativedsl.dom.UnresolvedValueUsed
+import org.gradle.internal.declarativedsl.dom.ValueTypeMismatch
 import org.gradle.internal.declarativedsl.dom.data.data
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
 

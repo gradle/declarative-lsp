@@ -18,6 +18,7 @@ package org.gradle.declarative.lsp
 
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
+import org.eclipse.lsp4j.CompletionItemLabelDetails
 import org.eclipse.lsp4j.CompletionList
 import org.eclipse.lsp4j.CompletionParams
 import org.eclipse.lsp4j.DidChangeTextDocumentParams
@@ -26,26 +27,26 @@ import org.eclipse.lsp4j.DidOpenTextDocumentParams
 import org.eclipse.lsp4j.DidSaveTextDocumentParams
 import org.eclipse.lsp4j.Hover
 import org.eclipse.lsp4j.HoverParams
-import org.eclipse.lsp4j.InsertReplaceEdit
 import org.eclipse.lsp4j.InsertTextFormat
-import org.eclipse.lsp4j.InsertTextMode
 import org.eclipse.lsp4j.MarkupContent
 import org.eclipse.lsp4j.PublishDiagnosticsParams
-import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.dsl.schema.DataClass
 import org.gradle.declarative.dsl.schema.FunctionSemantics
+import org.gradle.declarative.dsl.schema.SchemaFunction
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
 import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.visit
+import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
+import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
 import org.slf4j.LoggerFactory
@@ -148,70 +149,51 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         val completions = params?.let {
             val uri = URI(it.textDocument.uri)
             withDom(uri) { dom ->
+                val schemaTypeRefContext = SchemaTypeRefContext(resources.analysisSchema)
                 dom.document.visit(
                     BestFittingNodeVisitor(
                         params.position,
                         DeclarativeDocument.DocumentNode.ElementNode::class
                     )
-                ).matchingNode?.let { node ->
-                    dom.overlayResolutionContainer.data(node).let { elementResolution ->
-                        val alreadyUsedProperty = node.content.mapNotNull { contentNode ->
-                            when (val contentType = dom.overlayResolutionContainer.data(contentNode)) {
-                                is DocumentResolution.PropertyResolution.PropertyAssignmentResolved -> {
-                                    contentType.property
-                                }
-                                else -> null
-                            }
-                        }
-
-                        when (elementResolution) {
-                            is DocumentResolution.ElementResolution.SuccessfulElementResolution -> {
-                                when (val elementType = elementResolution.elementType) {
-                                    is DataClass -> {
-                                        elementType.properties.filter { property ->
-                                            !alreadyUsedProperty.contains(property)
-                                        }.map { properties ->
-                                            CompletionItem(properties.name).apply {
-                                                kind = CompletionItemKind.Field
-                                            }
-                                        } + elementType.memberFunctions.map { function ->
-                                            CompletionItem(function.simpleName).apply {
-                                                kind = CompletionItemKind.Method
-                                                when (val functionSemantics = function.semantics) {
-                                                    is FunctionSemantics.ConfigureSemantics -> {
-                                                        when (functionSemantics.configureBlockRequirement) {
-                                                            is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Required -> {
-                                                                this.insertText = function.simpleName + " {\n\t$0\n}"
-                                                                this.insertTextFormat = InsertTextFormat.Snippet
-                                                            }
-                                                            else -> {}
-                                                        }
-                                                    }
-                                                    else -> {}
-                                                }
-                                            }
-                                        }
-                                    }
-                                    else -> null
-                                }
-                            }
-
-                            else -> null
-                        }
-                    }
-                }
+                ).matchingNode?.withDataClass(dom.overlayResolutionContainer) { dataClass ->
+                    computePropertyCompletions(dataClass) + computeFunctionCompletions(dataClass)
+                }.orEmpty()
             }
         }.orEmpty().toMutableList()
         return CompletableFuture.completedFuture(Either.forLeft(completions))
     }
 
-    private fun computePropertyCompletions(node: DeclarativeDocument.DocumentNode.ElementNode): List<CompletionItem> {
-        TODO()
-    }
+    private fun computePropertyCompletions(
+        dataClass: DataClass
+    ): List<CompletionItem> =
+        dataClass.properties.map { property ->
+            CompletionItem(property.name).apply {
+                kind = CompletionItemKind.Field
+                insertTextFormat = InsertTextFormat.Snippet
+                insertText = "${property.name} = $0"
+            }
+        }
 
-    private fun computeFunctionCompletions(node: DeclarativeDocument.DocumentNode.ElementNode): List<CompletionItem> {
-        TODO()
-    }
+    private fun computeFunctionCompletions(dataClass: DataClass): List<CompletionItem> =
+        dataClass.memberFunctions.map { function ->
+            // Anatomy of a DCL completion item:
+            // When the completion is requested, the following will (probably, based on the editor) show up:
+            //
+            // foo(bar: Baz) { } (optional configuration)
+            // |-| CompletionItem.label
+            //    |-------------------------------------| CompletionItem.labelDetails.detail
+            CompletionItem(function.simpleName).apply {
+                kind = CompletionItemKind.Method
+                insertTextFormat = InsertTextFormat.Snippet
+                insertText = function.toInsertText()
+                labelDetails = CompletionItemLabelDetails().apply {
+                    this.detail = listOfNotNull(
+                        function.toParameterLabel(),
+                        function.toConfigurabilityLabel()
+                    ).joinToString(" ")
+                }
+            }
+        }
 
     // Utility and other member functions ------------------------------------------------------------------------------
 
@@ -282,4 +264,54 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::class.java)
     }
+}
+
+private fun SchemaFunction.toInsertText(): String = when (val semantics = this.semantics) {
+    is FunctionSemantics.ConfigureSemantics -> when (semantics.configureBlockRequirement) {
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Required -> "${this.simpleName} {\n\t$0\n}"
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Optional -> "${this.simpleName} {\n\t$0\n}"
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.NotAllowed -> "${this.simpleName}(${this.toParameterSnippet()})$0"
+    }
+
+    else -> "${this.simpleName}()"
+}
+
+private fun SchemaFunction.toParameterSnippet(): String =
+    this.parameters.mapIndexed() { index, parameter ->
+        // Snippet parameter placeholders are 1-based
+        "\${${index + 1}:${parameter.name}}"
+    }.joinToString(", ")
+
+private fun SchemaFunction.toParameterLabel(): String? {
+    val parameterNames = this.parameters.joinToString(", ") { parameter ->
+        "${parameter.name}: ${parameter.type}"
+    }
+    return if (parameterNames.isNotEmpty()) "($parameterNames)" else null
+}
+
+private fun SchemaFunction.toConfigurabilityLabel(): String? = when (val semantics = this.semantics) {
+    is FunctionSemantics.ConfigureSemantics -> when (semantics.configureBlockRequirement) {
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Required -> " { }"
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Optional -> " { } (optional configuration)"
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.NotAllowed -> null
+    }
+
+    else -> null
+}
+
+/**
+ * Calls the specified function block if the element resolution was successful, and the element type is a data class.
+ */
+private fun <N : DeclarativeDocument.DocumentNode, R> N.withDataClass(
+    resolutionContainer: DocumentResolutionContainer,
+    function: (DataClass) -> R
+): R? = when (val nodeType = resolutionContainer.data(this)) {
+    is DocumentResolution.ElementResolution.SuccessfulElementResolution -> {
+        when (val elementType = nodeType.elementType) {
+            is DataClass -> function(elementType)
+            else -> null
+        }
+    }
+
+    else -> null
 }

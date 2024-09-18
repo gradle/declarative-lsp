@@ -60,6 +60,11 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
     }
 
     override fun initialize(params: InitializeParams?): CompletableFuture<InitializeResult> {
+        requireNotNull(params) {
+            "Initialization parameters must not be null"
+        }
+        textDocumentService.setClientCapabilities(params.capabilities)
+
         val serverCapabilities = ServerCapabilities()
         // Here we set the capabilities we support
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
@@ -67,19 +72,22 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         serverCapabilities.completionProvider = CompletionOptions(false, listOf())
         serverCapabilities.signatureHelpProvider = SignatureHelpOptions(listOf("(", ","))
 
-        val workspaceFolder = params!!.workspaceFolders[0]
+        val workspaceFolder = params.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))
 
-        client.notifyProgress(
-            ProgressParams(
-                params.workDoneToken,
-                Either.forLeft(
-                    WorkDoneProgressBegin().apply {
-                        title = "Fetching Declarative Gradle model"
-                    }
+        // Progress reporting under initialization only works with clients providing a `workDoneToken`
+        params.workDoneToken?.let {
+            client.notifyProgress(
+                ProgressParams(
+                    params.workDoneToken,
+                    Either.forLeft(
+                        WorkDoneProgressBegin().apply {
+                            title = "Fetching Declarative Gradle model"
+                        }
+                    )
                 )
             )
-        )
+        }
 
         LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
         TapiConnectionHandler(workspaceFolderFile).let {

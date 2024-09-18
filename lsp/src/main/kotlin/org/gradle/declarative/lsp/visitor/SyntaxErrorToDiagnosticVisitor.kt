@@ -59,6 +59,7 @@ class SyntaxErrorToDiagnosticVisitor : DocumentVisitor() {
                     Position(0, 0)
                 )
             },
+            // TODO: Make a proper error message
             error.unsupportedConstruct.languageFeature.toString(),
             DiagnosticSeverity.Error,
             "Gradle Declarative DSL"

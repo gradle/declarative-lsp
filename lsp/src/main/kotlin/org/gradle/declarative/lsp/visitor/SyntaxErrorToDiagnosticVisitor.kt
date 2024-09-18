@@ -67,6 +67,7 @@ class SyntaxErrorToDiagnosticVisitor : DocumentVisitor() {
 
         is UnsupportedSyntax -> Diagnostic(
             nodeSourceData.toLspRange(),
+            // TODO: Make a proper error message
             error.cause.toString(),
             DiagnosticSeverity.Error,
             "Gradle Declarative DSL"

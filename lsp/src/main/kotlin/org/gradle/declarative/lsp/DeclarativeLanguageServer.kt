@@ -19,10 +19,13 @@ package org.gradle.declarative.lsp
 import org.eclipse.lsp4j.CompletionOptions
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.InitializeResult
+import org.eclipse.lsp4j.ProgressParams
 import org.eclipse.lsp4j.ServerCapabilities
 import org.eclipse.lsp4j.SetTraceParams
 import org.eclipse.lsp4j.TextDocumentSyncKind
 import org.eclipse.lsp4j.TraceValue
+import org.eclipse.lsp4j.WorkDoneProgressBegin
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
@@ -64,8 +67,19 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
 
         val workspaceFolder = params!!.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))
-        LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
 
+        client.notifyProgress(
+            ProgressParams(
+                params.workDoneToken,
+                Either.forLeft(
+                    WorkDoneProgressBegin().apply {
+                        title = "Fetching Declarative Gradle model"
+                    }
+                )
+            )
+        )
+
+        LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
         TapiConnectionHandler(workspaceFolderFile).let {
             val declarativeBuildModel = it.getDomPrequisites()
             textDocumentService.setResources(declarativeBuildModel)
@@ -73,7 +87,9 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
 
         initialized = true
         LOGGER.info("Gradle Declarative Language Server: initialized")
-        return CompletableFuture.completedFuture(InitializeResult(serverCapabilities))
+        return CompletableFuture.completedFuture(
+            InitializeResult(serverCapabilities)
+        )
     }
 
     override fun shutdown(): CompletableFuture<Any> {

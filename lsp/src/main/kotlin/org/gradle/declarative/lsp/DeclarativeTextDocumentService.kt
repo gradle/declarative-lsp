@@ -29,7 +29,11 @@ import org.eclipse.lsp4j.Hover
 import org.eclipse.lsp4j.HoverParams
 import org.eclipse.lsp4j.InsertTextFormat
 import org.eclipse.lsp4j.MarkupContent
+import org.eclipse.lsp4j.ParameterInformation
 import org.eclipse.lsp4j.PublishDiagnosticsParams
+import org.eclipse.lsp4j.SignatureHelp
+import org.eclipse.lsp4j.SignatureHelpParams
+import org.eclipse.lsp4j.SignatureInformation
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
@@ -42,7 +46,6 @@ import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.visit
-import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
@@ -118,8 +121,6 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         val hover = params?.let {
             val uri = URI(it.textDocument.uri)
             withDom(uri) { dom ->
-                val position = it.position
-
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
                 val visitor = BestFittingNodeVisitor(
                     params.position,
@@ -127,8 +128,8 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                 )
                 dom.document.visit(visitor).matchingNode?.let { node ->
                     when (node) {
-                        is DeclarativeDocument.DocumentNode.PropertyNode -> node.name
-                        is DeclarativeDocument.DocumentNode.ElementNode -> node.name
+                        is DeclarativeDocument.DocumentNode.PropertyNode -> node.name + " (property)"
+                        is DeclarativeDocument.DocumentNode.ElementNode -> node.name + " (element)"
                         else -> null
                     }?.let { name ->
                         Hover(
@@ -143,13 +144,10 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 
     override fun completion(params: CompletionParams?): CompletableFuture<Either<MutableList<CompletionItem>, CompletionList>> {
-        // TODO: Look at SchemaFunction.parameters
-
         LOGGER.trace("Completion requested for position: {}", params)
         val completions = params?.let {
             val uri = URI(it.textDocument.uri)
             withDom(uri) { dom ->
-                val schemaTypeRefContext = SchemaTypeRefContext(resources.analysisSchema)
                 dom.document.visit(
                     BestFittingNodeVisitor(
                         params.position,
@@ -163,37 +161,36 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         return CompletableFuture.completedFuture(Either.forLeft(completions))
     }
 
-    private fun computePropertyCompletions(
-        dataClass: DataClass
-    ): List<CompletionItem> =
-        dataClass.properties.map { property ->
-            CompletionItem(property.name).apply {
-                kind = CompletionItemKind.Field
-                insertTextFormat = InsertTextFormat.Snippet
-                insertText = "${property.name} = $0"
-            }
-        }
+    override fun signatureHelp(params: SignatureHelpParams?): CompletableFuture<SignatureHelp> {
+        LOGGER.trace("Signature help requested for position: {}", params)
 
-    private fun computeFunctionCompletions(dataClass: DataClass): List<CompletionItem> =
-        dataClass.memberFunctions.map { function ->
-            // Anatomy of a DCL completion item:
-            // When the completion is requested, the following will (probably, based on the editor) show up:
-            //
-            // foo(bar: Baz) { } (optional configuration)
-            // |-| CompletionItem.label
-            //    |-------------------------------------| CompletionItem.labelDetails.detail
-            CompletionItem(function.simpleName).apply {
-                kind = CompletionItemKind.Method
-                insertTextFormat = InsertTextFormat.Snippet
-                insertText = function.toInsertText()
-                labelDetails = CompletionItemLabelDetails().apply {
-                    this.detail = listOfNotNull(
-                        function.toParameterLabel(),
-                        function.toConfigurabilityLabel()
-                    ).joinToString(" ")
+        val signatureInformationList = params?.let { params ->
+            val uri = URI(params.textDocument.uri)
+            withDom(uri) { dom ->
+                val position = params.position
+                val matchingNode = dom.document.visit(
+                    BestFittingNodeVisitor(
+                        position,
+                        DeclarativeDocument.DocumentNode::class
+                    )
+                ).matchingNode
+
+                matchingNode?.withDataClass(dom.overlayResolutionContainer) { node ->
+                    node.constructors.map { ctor ->
+                        SignatureInformation(ctor.simpleName).apply {
+                            parameters = ctor.parameters.map { parameter ->
+                                ParameterInformation(parameter.name)
+                            }
+                        }
+                    }
                 }
             }
-        }
+        }.orEmpty()
+
+        return CompletableFuture.completedFuture(
+            SignatureHelp(signatureInformationList, null, null)
+        )
+    }
 
     // Utility and other member functions ------------------------------------------------------------------------------
 
@@ -266,33 +263,57 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 }
 
-private fun SchemaFunction.toInsertText(): String = when (val semantics = this.semantics) {
-    is FunctionSemantics.ConfigureSemantics -> when (semantics.configureBlockRequirement) {
-        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Required -> "${this.simpleName} {\n\t$0\n}"
-        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Optional -> "${this.simpleName} {\n\t$0\n}"
-        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.NotAllowed -> "${this.simpleName}(${this.toParameterSnippet()})$0"
+private fun computePropertyCompletions(
+    dataClass: DataClass
+): List<CompletionItem> =
+    dataClass.properties.map { property ->
+        CompletionItem(property.name).apply {
+            kind = CompletionItemKind.Field
+            insertTextFormat = InsertTextFormat.Snippet
+            insertText = "${property.name} = $0"
+        }
     }
 
-    else -> "${this.simpleName}()"
+private fun computeFunctionCompletions(dataClass: DataClass): List<CompletionItem> =
+    dataClass.memberFunctions.map { function ->
+        // Anatomy of a DCL completion item:
+        // When the completion is requested, the following will (probably, based on the editor) show up:
+        //
+        // foo(bar: Baz) { } (optional configuration)
+        // |-| CompletionItem.label
+        //    |-------------------------------------| CompletionItem.labelDetails.detail
+        CompletionItem(function.simpleName).apply {
+            kind = CompletionItemKind.Method
+            insertTextFormat = InsertTextFormat.Snippet
+            insertText = computeCompletionInsertText(function)
+            labelDetails = CompletionItemLabelDetails().apply {
+                this.detail = listOfNotNull(
+                    computeCompletionParameterLabel(function),
+                    computeCompletionConfigurabilityLabel(function.semantics)
+                ).joinToString(" ")
+            }
+        }
+    }
+
+private fun computeCompletionInsertText(function: SchemaFunction): String {
+    val parameterSnippet = function.parameters.joinToString(", ") { parameter ->
+        // Snippet parameter placeholders are 1-based
+        "\${${parameter.name}:${parameter.name}}"
+    }
+    return "${function.simpleName}($parameterSnippet)$0"
 }
 
-private fun SchemaFunction.toParameterSnippet(): String =
-    this.parameters.mapIndexed() { index, parameter ->
-        // Snippet parameter placeholders are 1-based
-        "\${${index + 1}:${parameter.name}}"
-    }.joinToString(", ")
-
-private fun SchemaFunction.toParameterLabel(): String? {
-    val parameterNames = this.parameters.joinToString(", ") { parameter ->
+private fun computeCompletionParameterLabel(schemaFunction: SchemaFunction): String? {
+    val parameterNames = schemaFunction.parameters.joinToString(", ") { parameter ->
         "${parameter.name}: ${parameter.type}"
     }
     return if (parameterNames.isNotEmpty()) "($parameterNames)" else null
 }
 
-private fun SchemaFunction.toConfigurabilityLabel(): String? = when (val semantics = this.semantics) {
+private fun computeCompletionConfigurabilityLabel(semantics: FunctionSemantics): String? = when (semantics) {
     is FunctionSemantics.ConfigureSemantics -> when (semantics.configureBlockRequirement) {
-        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Required -> " { }"
-        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Optional -> " { } (optional configuration)"
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Required -> " { this: ${semantics.configuredType} }"
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Optional -> " { this: ${semantics.configuredType} } (optional configuration)"
         is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.NotAllowed -> null
     }
 

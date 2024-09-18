@@ -22,6 +22,7 @@ import org.eclipse.lsp4j.InitializeResult
 import org.eclipse.lsp4j.ProgressParams
 import org.eclipse.lsp4j.ServerCapabilities
 import org.eclipse.lsp4j.SetTraceParams
+import org.eclipse.lsp4j.SignatureHelpOptions
 import org.eclipse.lsp4j.TextDocumentSyncKind
 import org.eclipse.lsp4j.TraceValue
 import org.eclipse.lsp4j.WorkDoneProgressBegin
@@ -64,6 +65,7 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
         serverCapabilities.setHoverProvider(true)
         serverCapabilities.completionProvider = CompletionOptions(false, listOf())
+        serverCapabilities.signatureHelpProvider = SignatureHelpOptions(listOf("(", ","))
 
         val workspaceFolder = params!!.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))

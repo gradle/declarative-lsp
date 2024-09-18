@@ -39,6 +39,9 @@ import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.dsl.schema.DataClass
+import org.gradle.declarative.dsl.schema.DataParameter
+import org.gradle.declarative.dsl.schema.DataType
+import org.gradle.declarative.dsl.schema.DataTypeRef
 import org.gradle.declarative.dsl.schema.FunctionSemantics
 import org.gradle.declarative.dsl.schema.SchemaFunction
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
@@ -46,6 +49,7 @@ import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.visit
+import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
@@ -56,6 +60,8 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URI
 import java.util.concurrent.CompletableFuture
+
+private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::class.java)
 
 class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware {
     private val documentStore = VersionedDocumentStore()
@@ -153,9 +159,9 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                         params.position,
                         DeclarativeDocument.DocumentNode.ElementNode::class
                     )
-                ).matchingNode?.withDataClass(dom.overlayResolutionContainer) { dataClass ->
+                ).matchingNode?.getDataClass(dom.overlayResolutionContainer)?.let { dataClass ->
                     computePropertyCompletions(dataClass) + computeFunctionCompletions(dataClass)
-                }.orEmpty()
+                }
             }
         }.orEmpty().toMutableList()
         return CompletableFuture.completedFuture(Either.forLeft(completions))
@@ -168,19 +174,22 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
             val uri = URI(params.textDocument.uri)
             withDom(uri) { dom ->
                 val position = params.position
-                val matchingNode = dom.document.visit(
+                val matchingNodes = dom.document.visit(
                     BestFittingNodeVisitor(
                         position,
-                        DeclarativeDocument.DocumentNode::class
+                        DeclarativeDocument.DocumentNode.ElementNode::class
                     )
-                ).matchingNode
+                ).matchingNodes
 
-                matchingNode?.withDataClass(dom.overlayResolutionContainer) { node ->
-                    node.constructors.map { ctor ->
-                        SignatureInformation(ctor.simpleName).apply {
-                            parameters = ctor.parameters.map { parameter ->
-                                ParameterInformation(parameter.name)
-                            }
+                val targetNode = matchingNodes[matchingNodes.size - 1]
+                val containerNode = matchingNodes[matchingNodes.size - 2]
+
+                containerNode.getDataClass(dom.overlayResolutionContainer)?.memberFunctions?.filter { function ->
+                    function.simpleName == targetNode.name
+                }?.map { function ->
+                    SignatureInformation(computeFunctionSignature(function)).apply {
+                        parameters = function.parameters.map { parameter ->
+                            ParameterInformation(computeParameterSignature(parameter))
                         }
                     }
                 }
@@ -258,10 +267,14 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         }
     }
 
-    companion object {
-        private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::class.java)
+    private fun DataTypeRef.resolve(): DataType {
+        val schemaTypeRefContext = SchemaTypeRefContext(resources.analysisSchema)
+        return schemaTypeRefContext.resolveRef(this)
     }
+
 }
+
+// Pure functions supporting LSP functions -----------------------------------------------------------------------------
 
 private fun computePropertyCompletions(
     dataClass: DataClass
@@ -303,12 +316,23 @@ private fun computeCompletionInsertText(function: SchemaFunction): String {
     return "${function.simpleName}($parameterSnippet)$0"
 }
 
+private fun computeFunctionSignature(function: SchemaFunction): String {
+    val parameterSignatures = function.parameters.map { parameter ->
+        computeParameterSignature(parameter)
+    }.joinToString(", ")
+
+    return "${function.simpleName}(${parameterSignatures})"
+}
+
 private fun computeCompletionParameterLabel(schemaFunction: SchemaFunction): String? {
     val parameterNames = schemaFunction.parameters.joinToString(", ") { parameter ->
-        "${parameter.name}: ${parameter.type}"
+        computeParameterSignature(parameter)
     }
     return if (parameterNames.isNotEmpty()) "($parameterNames)" else null
 }
+
+private fun computeParameterSignature(parameter: DataParameter) =
+    "${parameter.name}: ${parameter.type}"
 
 private fun computeCompletionConfigurabilityLabel(semantics: FunctionSemantics): String? = when (semantics) {
     is FunctionSemantics.ConfigureSemantics -> when (semantics.configureBlockRequirement) {
@@ -320,16 +344,17 @@ private fun computeCompletionConfigurabilityLabel(semantics: FunctionSemantics):
     else -> null
 }
 
+// Extension functions -------------------------------------------------------------------------------------------------
+
 /**
- * Calls the specified function block if the element resolution was successful, and the element type is a data class.
+ * Tries to resolve the data class of the given node. If the resolution fails, returns `null`.
  */
-private fun <N : DeclarativeDocument.DocumentNode, R> N.withDataClass(
-    resolutionContainer: DocumentResolutionContainer,
-    function: (DataClass) -> R
-): R? = when (val nodeType = resolutionContainer.data(this)) {
+private fun <N : DeclarativeDocument.DocumentNode> N.getDataClass(
+    resolutionContainer: DocumentResolutionContainer
+): DataClass? = when (val nodeType = resolutionContainer.data(this)) {
     is DocumentResolution.ElementResolution.SuccessfulElementResolution -> {
         when (val elementType = nodeType.elementType) {
-            is DataClass -> function(elementType)
+            is DataClass -> elementType
             else -> null
         }
     }

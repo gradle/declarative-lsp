@@ -32,12 +32,16 @@ class BestFittingNodeVisitor<T: DeclarativeDocument.Node>(
 ) : DocumentVisitor() {
 
     /** The node best-fitting the cursor position. */
-    var matchingNode: T? = null
+    var matchingNodes: List<T> = mutableListOf()
+
+    // Property to get the last node
+    val matchingNode: T?
+        get() = matchingNodes.lastOrNull()
 
     override fun visitNode(node: DeclarativeDocument.Node) {
         val nodeRange = node.sourceData.toLspRange()
         if (nodeType.isInstance(node) && Ranges.containsPosition(nodeRange, position))
-            matchingNode = nodeType.cast(node)
+            matchingNodes += nodeType.cast(node)
     }
 
 }

@@ -16,9 +16,9 @@
 
 package org.gradle.declarative.lsp
 
+import org.eclipse.lsp4j.ClientCapabilities
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
-import org.eclipse.lsp4j.CompletionItemLabelDetails
 import org.eclipse.lsp4j.CompletionList
 import org.eclipse.lsp4j.CompletionParams
 import org.eclipse.lsp4j.DidChangeTextDocumentParams
@@ -28,6 +28,7 @@ import org.eclipse.lsp4j.DidSaveTextDocumentParams
 import org.eclipse.lsp4j.Hover
 import org.eclipse.lsp4j.HoverParams
 import org.eclipse.lsp4j.InsertTextFormat
+import org.eclipse.lsp4j.InsertTextMode
 import org.eclipse.lsp4j.MarkupContent
 import org.eclipse.lsp4j.ParameterInformation
 import org.eclipse.lsp4j.PublishDiagnosticsParams
@@ -38,8 +39,11 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
+import org.gradle.declarative.dsl.schema.AnalysisSchema
 import org.gradle.declarative.dsl.schema.DataClass
 import org.gradle.declarative.dsl.schema.DataParameter
+import org.gradle.declarative.dsl.schema.DataType
+import org.gradle.declarative.dsl.schema.DataTypeRef
 import org.gradle.declarative.dsl.schema.FunctionSemantics
 import org.gradle.declarative.dsl.schema.SchemaFunction
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
@@ -47,13 +51,13 @@ import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.visit
+import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
-import org.jetbrains.kotlin.utils.addToStdlib.ifNotEmpty
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URI
@@ -65,7 +69,9 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     private val documentStore = VersionedDocumentStore()
 
     private lateinit var client: LanguageClient
+    private lateinit var clientCapabilities: ClientCapabilities
     private lateinit var resources: ResolvedDeclarativeResourcesModel
+
     private lateinit var schemaEvaluator: SimpleAnalysisEvaluator
 
     override fun connect(client: LanguageClient?) {
@@ -73,6 +79,10 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 
     // LSP Functions ---------------------------------------------------------------------------------------------------
+
+    fun setClientCapabilities(clientCapabilities: ClientCapabilities) {
+        this.clientCapabilities = clientCapabilities
+    }
 
     fun setResources(resources: ResolvedDeclarativeResourcesModel) {
         this.resources = resources
@@ -157,8 +167,11 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                         params.position,
                         DeclarativeDocument.DocumentNode.ElementNode::class
                     )
-                ).matchingNode?.getDataClass(dom.overlayResolutionContainer)?.let { dataClass ->
-                    computePropertyCompletions(dataClass) + computeFunctionCompletions(dataClass)
+                ).matchingNode
+                    ?.getDataClass(dom.overlayResolutionContainer)
+                    ?.let { dataClass ->
+                    computePropertyCompletions(dataClass, resources.analysisSchema) +
+                            computeFunctionCompletions(dataClass, resources.analysisSchema)
                 }
             }
         }.orEmpty().toMutableList()
@@ -168,10 +181,10 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     override fun signatureHelp(params: SignatureHelpParams?): CompletableFuture<SignatureHelp> {
         LOGGER.trace("Signature help requested for position: {}", params)
 
-        val signatureInformationList = params?.let { params ->
-            val uri = URI(params.textDocument.uri)
+        val signatureInformationList = params?.let {
+            val uri = URI(it.textDocument.uri)
             withDom(uri) { dom ->
-                val position = params.position
+                val position = it.position
                 val matchingNodes = dom.document.visit(
                     BestFittingNodeVisitor(
                         position,
@@ -185,9 +198,9 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                 containerNode.getDataClass(dom.overlayResolutionContainer)?.memberFunctions?.filter { function ->
                     function.simpleName == targetNode.name
                 }?.map { function ->
-                    SignatureInformation(function.toSignature()).apply {
+                    SignatureInformation(function.toSignatureLabel()).apply {
                         parameters = function.parameters.map { parameter ->
-                            ParameterInformation(parameter.toSignature())
+                            ParameterInformation(parameter.toSignatureLabel())
                         }
                     }
                 }
@@ -270,49 +283,49 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
 // Pure functions supporting LSP functions -----------------------------------------------------------------------------
 
 private fun computePropertyCompletions(
-    dataClass: DataClass
-): List<CompletionItem> =
-    dataClass.properties.map { property ->
-        CompletionItem(property.name).apply {
+    dataClass: DataClass,
+    analysisSchema: AnalysisSchema
+): List<CompletionItem> {
+    return dataClass.properties.map { property ->
+        val propertyName = property.valueType.toSimpleName()
+        val targetType = property.valueType.toSimpleName()
+
+        CompletionItem("$propertyName = $targetType").apply {
             kind = CompletionItemKind.Field
             insertTextFormat = InsertTextFormat.Snippet
-            insertText = "${property.name} = $0"
+            insertText = "${property.name} = ${computeTypedPlaceholder(1, property.valueType, analysisSchema)}"
         }
     }
+}
 
-private fun computeFunctionCompletions(dataClass: DataClass): List<CompletionItem> =
+private fun computeFunctionCompletions(
+    dataClass: DataClass,
+    analysisSchema: AnalysisSchema
+): List<CompletionItem> =
     dataClass.memberFunctions.map { function ->
-        // Anatomy of a DCL completion item:
-        // When the completion is requested, the following will (probably, based on the editor) show up:
-        //
-        // foo(bar: Baz) { } (optional configuration)
-        // |-| CompletionItem.label
-        //    |-------------------------------------| CompletionItem.labelDetails.detail
-        CompletionItem(function.simpleName).apply {
+        val functionName = function.simpleName
+        val parameterSignature = when(function.parameters.isEmpty()) {
+            true -> ""
+            false -> function.parameters.joinToString(",", "(", ")") { it.toSignatureLabel() }
+        }
+        val configureBlockLabel = function.semantics.toBlockConfigurabilityLabel().orEmpty()
+
+        CompletionItem("$functionName$parameterSignature$configureBlockLabel").apply {
             kind = CompletionItemKind.Method
             insertTextFormat = InsertTextFormat.Snippet
-            insertText = computeCompletionInsertText(function)
-            labelDetails = CompletionItemLabelDetails().apply {
-                this.detail = listOfNotNull(
-                    // This might not be straightforward to read:
-                    //  - If there are no parameters, the function signature will omit the parentheses
-                    //  - If there are parameters, they will be listed in parentheses
-                    function.parameters.ifNotEmpty {
-                        joinToString(", ", "(", ")") { parameter ->
-                            parameter.toSignature()
-                        }
-                    },
-                    function.semantics.toBlockConfigurabilityLabel()
-                ).joinToString(" ")
-            }
+            insertTextMode = InsertTextMode.AdjustIndentation
+            insertText = computeCompletionInsertText(function, analysisSchema)
         }
     }
 
-private fun computeCompletionInsertText(function: SchemaFunction): String {
-    val parameterSnippet = function.parameters.joinToString(", ", "(", ")") { parameter ->
-        // Snippet parameter placeholders are 1-based
-        "\${${parameter.name}:${parameter.name}}"
-    }
+private fun computeCompletionInsertText(
+    function: SchemaFunction,
+    analysisSchema: AnalysisSchema
+): String {
+    val parameterSnippet = function.parameters.mapIndexed { index, parameter ->
+        // Additional placeholders are indexed from 1
+        computeTypedPlaceholder(index + 1, parameter.type, analysisSchema)
+    }.joinToString(", ", "(", ")")
 
     return when (val semantics = function.semantics) {
         is FunctionSemantics.ConfigureSemantics -> {
@@ -326,34 +339,59 @@ private fun computeCompletionInsertText(function: SchemaFunction): String {
                         "${function.simpleName}${parameterSnippet} {\n\t$0\n}"
                     }
                 }
+
                 else -> {
                     // Optional configuration can be omitted
-                    "${function.simpleName}${parameterSnippet} $0"
+                    "${function.simpleName}${parameterSnippet}$0"
                 }
             }
         }
-        else -> "${function.simpleName}${parameterSnippet} $0"
+
+        else -> "${function.simpleName}${parameterSnippet}$0"
+    }
+}
+
+/**
+ * Computes a [placeholder](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#placeholders) based on the given data type.
+ *
+ * If there is a specific placeholder for the given data type, it will be used.
+ * Otherwise, a simple indexed will be used
+ */
+private fun computeTypedPlaceholder(
+    index: Int,
+    type: DataTypeRef,
+    analysisSchema: AnalysisSchema
+): String {
+    val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(type)
+    return when (resolvedType) {
+        is DataType.BooleanDataType -> "\${$index|true,false|}"
+        is DataType.IntDataType -> "\${$index:0}"
+        is DataType.LongDataType -> "\${$index:0L}"
+        is DataType.StringDataType -> "\"\${$index}\""
+        else -> "\$$index"
     }
 }
 
 // Extension functions -------------------------------------------------------------------------------------------------
 
-private fun DataParameter.toSignature() =
-    "${this.name}: ${this.type}"
+// TODO: this might not be the best way to resolve the type name, but it works for now
+private fun DataTypeRef.toSimpleName(): String =  this.toString()
+
+private fun DataParameter.toSignatureLabel() = "${this.name}: ${this.type.toSimpleName()}"
 
 private fun FunctionSemantics.toBlockConfigurabilityLabel(): String? = when (this) {
     is FunctionSemantics.ConfigureSemantics -> when (this.configureBlockRequirement) {
-        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Required -> " { this: ${this.configuredType} }"
-        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Optional -> " { this: ${this.configuredType} } (optional configuration)"
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Required -> " { this: ${this.configuredType.toSimpleName()} }"
+        is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.Optional -> " { this: ${this.configuredType.toSimpleName()} } (optional configuration)"
         is FunctionSemantics.ConfigureSemantics.ConfigureBlockRequirement.NotAllowed -> null
     }
 
     else -> null
 }
 
-private fun SchemaFunction.toSignature(): String {
+private fun SchemaFunction.toSignatureLabel(): String {
     val parameterSignatures = this.parameters.joinToString(", ") { parameter ->
-        parameter.toSignature()
+        parameter.toSignatureLabel()
     }
 
     return "${this.simpleName}(${parameterSignatures})"

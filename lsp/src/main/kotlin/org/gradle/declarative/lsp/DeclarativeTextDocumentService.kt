@@ -287,7 +287,7 @@ private fun computePropertyCompletions(
     analysisSchema: AnalysisSchema
 ): List<CompletionItem> {
     return dataClass.properties.map { property ->
-        val propertyName = property.valueType.toSimpleName()
+        val propertyName = property.name
         val targetType = property.valueType.toSimpleName()
 
         CompletionItem("$propertyName = $targetType").apply {

@@ -6,6 +6,8 @@ This project implements an [LSP](https://microsoft.github.io/language-server-pro
 
 The LSP project can be built and packaged by simply running `./gradlew shadowJar`.
 
+The runnable JAR can then be found at [./lsp/build/libs/lsp-all.jar](./lsp/build/libs/lsp-all.jar).
+
 ## Integrations
 
 This server can be used in the integrations below:

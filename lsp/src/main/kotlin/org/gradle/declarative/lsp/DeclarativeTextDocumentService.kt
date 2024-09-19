@@ -190,7 +190,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                         position,
                         DeclarativeDocument.DocumentNode.ElementNode::class
                     )
-                ).matchingNodes
+                ).containers
 
                 val targetNode = matchingNodes[matchingNodes.size - 1]
                 val containerNode = matchingNodes[matchingNodes.size - 2]

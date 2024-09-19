@@ -31,17 +31,26 @@ class BestFittingNodeVisitor<T: DeclarativeDocument.Node>(
     private val nodeType: KClass<T>
 ) : DocumentVisitor() {
 
-    /** The node best-fitting the cursor position. */
-    var matchingNodes: List<T> = mutableListOf()
+    /**
+     * All the elements leading to the best-fitting node.
+     * Might contain the
+     */
+    var containers: MutableList<DeclarativeDocument.DocumentNode.ElementNode> = mutableListOf()
 
-    // Property to get the last node
-    val matchingNode: T?
-        get() = matchingNodes.lastOrNull()
+    /**
+     * The node that best fits the cursor position.
+     */
+    var bestFittingNode: T? = null
 
     override fun visitNode(node: DeclarativeDocument.Node) {
         val nodeRange = node.sourceData.toLspRange()
-        if (nodeType.isInstance(node) && Ranges.containsPosition(nodeRange, position))
-            matchingNodes += nodeType.cast(node)
+        if (nodeType.isInstance(node) && Ranges.containsPosition(nodeRange, position)) {
+            bestFittingNode = nodeType.cast(node)
+        }
+    }
+
+    override fun visitDocumentElementNode(node: DeclarativeDocument.DocumentNode.ElementNode) {
+        containers += node
     }
 
 }

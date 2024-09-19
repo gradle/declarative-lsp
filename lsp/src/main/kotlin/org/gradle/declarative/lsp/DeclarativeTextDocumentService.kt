@@ -140,7 +140,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                     params.position,
                     DeclarativeDocument.DocumentNode::class
                 )
-                dom.document.visit(visitor).matchingNode?.let { node ->
+                dom.document.visit(visitor).bestFittingNode?.let { node ->
                     when (node) {
                         is DeclarativeDocument.DocumentNode.PropertyNode -> node.name + " (property)"
                         is DeclarativeDocument.DocumentNode.ElementNode -> node.name + " (element)"
@@ -167,7 +167,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                         params.position,
                         DeclarativeDocument.DocumentNode.ElementNode::class
                     )
-                ).matchingNode
+                ).bestFittingNode
                     ?.getDataClass(dom.overlayResolutionContainer)
                     ?.let { dataClass ->
                     computePropertyCompletions(dataClass, resources.analysisSchema) +

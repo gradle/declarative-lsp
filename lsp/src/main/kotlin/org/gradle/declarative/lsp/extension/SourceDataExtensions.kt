@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp
+package org.gradle.declarative.lsp.extension
 
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range

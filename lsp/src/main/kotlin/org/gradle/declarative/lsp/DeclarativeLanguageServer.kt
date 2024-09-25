@@ -69,6 +69,7 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         // Here we set the capabilities we support
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
         serverCapabilities.setHoverProvider(true)
+        serverCapabilities.setCodeActionProvider(true)
         serverCapabilities.completionProvider = CompletionOptions(false, listOf())
         serverCapabilities.signatureHelpProvider = SignatureHelpOptions(listOf("(", ","))
 

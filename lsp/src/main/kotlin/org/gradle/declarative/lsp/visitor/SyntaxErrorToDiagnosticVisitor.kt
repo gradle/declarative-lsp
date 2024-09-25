@@ -20,7 +20,7 @@ import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
-import org.gradle.declarative.lsp.toLspRange
+import org.gradle.declarative.lsp.extension.toLspRange
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentError
 import org.gradle.internal.declarativedsl.dom.SyntaxError

@@ -17,7 +17,7 @@
 package org.gradle.declarative.lsp.visitor
 
 import org.eclipse.lsp4j.Diagnostic
-import org.gradle.declarative.lsp.toLspRange
+import org.gradle.declarative.lsp.extension.toLspRange
 import org.gradle.internal.declarativedsl.dom.AmbiguousName
 import org.gradle.internal.declarativedsl.dom.BlockMismatch
 import org.gradle.internal.declarativedsl.dom.CrossScopeAccess

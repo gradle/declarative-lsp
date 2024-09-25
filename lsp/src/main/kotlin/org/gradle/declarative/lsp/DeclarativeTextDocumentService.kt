@@ -17,6 +17,9 @@
 package org.gradle.declarative.lsp
 
 import org.eclipse.lsp4j.ClientCapabilities
+import org.eclipse.lsp4j.CodeAction
+import org.eclipse.lsp4j.CodeActionParams
+import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
 import org.eclipse.lsp4j.CompletionList
@@ -47,6 +50,10 @@ import org.gradle.declarative.dsl.schema.DataTypeRef
 import org.gradle.declarative.dsl.schema.FunctionSemantics
 import org.gradle.declarative.dsl.schema.SchemaFunction
 import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
+import org.gradle.declarative.lsp.extension.containsRange
+import org.gradle.declarative.lsp.extension.toJsonMap
+import org.gradle.declarative.lsp.extension.toLspRange
+import org.gradle.declarative.lsp.mutation.SetJavaVersion
 import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
@@ -54,6 +61,9 @@ import org.gradle.declarative.lsp.visitor.visit
 import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
+import org.gradle.internal.declarativedsl.dom.mutation.MutationApplicability
+import org.gradle.internal.declarativedsl.dom.mutation.MutationApplicabilityChecker
+import org.gradle.internal.declarativedsl.dom.mutation.MutationDefinition
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
@@ -67,6 +77,10 @@ private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::cla
 
 class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware {
     private val documentStore = VersionedDocumentStore()
+    private val mutations = listOf(
+        SetJavaVersion()
+    )
+    private var applicableMutations: List<Pair<MutationDefinition, MutationApplicability>> = emptyList()
 
     private lateinit var client: LanguageClient
     private lateinit var clientCapabilities: ClientCapabilities
@@ -170,9 +184,9 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                 ).bestFittingNode
                     ?.getDataClass(dom.overlayResolutionContainer)
                     ?.let { dataClass ->
-                    computePropertyCompletions(dataClass, resources.analysisSchema) +
-                            computeFunctionCompletions(dataClass, resources.analysisSchema)
-                }
+                        computePropertyCompletions(dataClass, resources.analysisSchema) +
+                                computeFunctionCompletions(dataClass, resources.analysisSchema)
+                    }
             }
         }.orEmpty().toMutableList()
         return CompletableFuture.completedFuture(Either.forLeft(completions))
@@ -212,11 +226,41 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         )
     }
 
+    override fun codeAction(params: CodeActionParams?): CompletableFuture<MutableList<Either<Command, CodeAction>>> {
+        val codeActions: List<Either<Command, CodeAction>> = params?.let {
+            val uri = URI(params.textDocument.uri)
+            withDom(uri) { dom ->
+                applicableMutations.mapNotNull { (mutation, applicability) ->
+                    when (applicability) {
+                        is MutationApplicability.AffectedNode ->
+                            if (applicability.node.sourceData.toLspRange().containsRange(params.range)) {
+                                mutation
+                            } else {
+                                null
+                            }
+
+                        is MutationApplicability.ScopeWithoutAffectedNodes ->
+                            mutation
+                    }?.let {
+                        Command(mutation.name, "gradle-dcl.applyMutation").apply {
+                            arguments = mutation.parameters.map { it.toJsonMap() }
+                        }
+                    }
+                }
+            }
+        }.orEmpty().map {
+            Either.forLeft(it)
+        }
+
+        return CompletableFuture.completedFuture(codeActions.toMutableList())
+    }
+
     // Utility and other member functions ------------------------------------------------------------------------------
 
     private fun processDocument(uri: URI) = withDom(uri) { dom ->
         reportSyntaxErrors(uri, dom)
         reportSemanticErrors(uri, dom)
+        collectApplicableMutations(dom)
     }
 
     /**
@@ -254,6 +298,15 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                 diagnostics
             )
         )
+    }
+
+    private fun collectApplicableMutations(dom: DocumentOverlayResult) {
+        val applicabilityChecker = MutationApplicabilityChecker(resources.analysisSchema, dom.result)
+        applicableMutations = mutations.flatMap { mutation ->
+            applicabilityChecker.checkApplicability(mutation).map {
+                Pair(mutation, it)
+            }
+        }
     }
 
     private fun parse(uri: URI, text: String): DocumentOverlayResult {
@@ -304,7 +357,7 @@ private fun computeFunctionCompletions(
 ): List<CompletionItem> =
     dataClass.memberFunctions.map { function ->
         val functionName = function.simpleName
-        val parameterSignature = when(function.parameters.isEmpty()) {
+        val parameterSignature = when (function.parameters.isEmpty()) {
             true -> ""
             false -> function.parameters.joinToString(",", "(", ")") { it.toSignatureLabel() }
         }
@@ -375,7 +428,7 @@ private fun computeTypedPlaceholder(
 // Extension functions -------------------------------------------------------------------------------------------------
 
 // TODO: this might not be the best way to resolve the type name, but it works for now
-private fun DataTypeRef.toSimpleName(): String =  this.toString()
+private fun DataTypeRef.toSimpleName(): String = this.toString()
 
 private fun DataParameter.toSignatureLabel() = "${this.name}: ${this.type.toSimpleName()}"
 

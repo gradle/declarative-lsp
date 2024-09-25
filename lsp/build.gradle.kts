@@ -1,3 +1,7 @@
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+
 /*
  * Copyright 2024 the original author or authors.
  *
@@ -18,6 +22,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.detekt)
     alias(libs.plugins.shadow)
+    `maven-publish`
 }
 
 dependencies {
@@ -45,6 +50,24 @@ java {
     }
 }
 
+publishing {
+    publications {
+        create<MavenPublication>("mavenJava") {
+            group = "org.gradle"
+            artifactId = "declarative-lsp"
+            version = "0.0.1-${timestamp()}-SNAPSHOT"
+            artifact(tasks.shadowJar)
+        }
+    }
+    repositories {
+        maven {
+            // Github Packages
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/gradle/declarative-lsp")
+        }
+    }
+}
+
 testing {
     suites {
         val test by getting(JvmTestSuite::class) {
@@ -59,4 +82,9 @@ tasks {
             attributes["Main-Class"] = "org.gradle.declarative.lsp.MainKt"
         }
     }
+}
+
+fun timestamp(): String {
+    val time = ZonedDateTime.now(ZoneId.of("UTC"))
+    return time.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
 }

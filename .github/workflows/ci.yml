@@ -31,3 +31,5 @@ jobs:
         validate-wrappers: true
     - name: Publish to GitHub Packages
       run: ./gradlew publish
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

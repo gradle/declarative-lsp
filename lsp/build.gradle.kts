@@ -61,9 +61,12 @@ publishing {
     }
     repositories {
         maven {
-            // Github Packages
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/gradle/declarative-lsp")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
         }
     }
 }

@@ -1,6 +1,8 @@
 name: CI
 on:
   push:
+    branches:
+      - '**'        # Allow push to any branch to trigger the workflow
   workflow_dispatch:
 
 jobs:
@@ -23,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -42,20 +45,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pages: write
+    if: github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '21'
-    - uses: gradle/actions/setup-gradle@v4
-      with:
-        validate-wrappers: true
-    - name: Package farJar
-      run: ./gradlew :lsp:shadowJar
-    - name: Upload Pages Artifact
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: "./lsp/build/libs"
-    - name: Deploy to GitHub Pages
-      uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: true
+      - name: Package farJar
+        run: ./gradlew :lsp:shadowJar
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./lsp/build/libs"
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

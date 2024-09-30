@@ -24,6 +24,7 @@ import org.gradle.internal.declarativedsl.dom.CrossScopeAccess
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.IsError
+import org.gradle.internal.declarativedsl.dom.NonEnumValueNamedReference
 import org.gradle.internal.declarativedsl.dom.NotAssignable
 import org.gradle.internal.declarativedsl.dom.ResolutionFailureReason
 import org.gradle.internal.declarativedsl.dom.UnresolvedBase
@@ -63,6 +64,7 @@ class SemanticErrorToDiagnosticVisitor(private val documentOverlayResult: Docume
         NotAssignable -> "Not assignable"
         UnresolvedValueUsed -> "Unresolved value used"
         ValueTypeMismatch -> "Value type mismatch"
+        NonEnumValueNamedReference -> "Non-enum value named reference"
     }
 
 }

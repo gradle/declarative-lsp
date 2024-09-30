@@ -49,7 +49,7 @@ class AddDependency: MutationDefinition {
 
     override fun isCompatibleWithSchema(projectAnalysisSchema: AnalysisSchema): Boolean =
         projectAnalysisSchema
-            .dataClassesByFqName
+            .dataClassTypesByFqName
             .keys
             .any { it.qualifiedName == "org.gradle.api.experimental.common.HasLibraryDependencies" }
 

@@ -43,7 +43,7 @@ class SetJavaVersion : MutationDefinition {
 
     override fun isCompatibleWithSchema(projectAnalysisSchema: AnalysisSchema): Boolean =
         projectAnalysisSchema
-            .dataClassesByFqName
+            .dataClassTypesByFqName
             .keys
             .any {
                 it.qualifiedName == "org.gradle.api.experimental.jvm.HasJvmApplication"

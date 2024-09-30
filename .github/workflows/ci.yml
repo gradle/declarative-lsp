@@ -16,11 +16,30 @@ jobs:
       - name: Execute Gradle build
         run: ./gradlew build
 
-  publish:
+  publish-registry:
     needs: build
     runs-on: ubuntu-latest
     permissions:
       packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: true
+      - name: Publish to GitHub Packages
+        run: ./gradlew publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-java@v4

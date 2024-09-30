@@ -31,7 +31,9 @@ fun main() {
     val launcher = LSPLauncher.createServerLauncher(
         languageServer,
         System.`in`,
-        System.out
+        System.out,
+//        false,
+//        PrintWriter(System.err)
     )
     val remoteProxy = launcher.remoteProxy
     languageServer.connect(remoteProxy)

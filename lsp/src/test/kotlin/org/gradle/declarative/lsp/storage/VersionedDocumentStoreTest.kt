@@ -17,7 +17,7 @@
 package org.gradle.declarative.lsp.storage
 
 import io.mockk.mockk
-import org.gradle.declarative.lsp.VersionedDocumentStore
+import org.gradle.declarative.lsp.service.VersionedDocumentStore
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -36,65 +36,70 @@ class VersionedDocumentStoreTest {
 
     @Test
     fun `null to initial works`() {
-        store.storeInitial(TEST_URI, NEW_DOM)
+        store.storeInitial(TEST_URI, "v0", NEW_DOM)
 
         store[TEST_URI].let {
             assertNotNull(it)
-            assertEquals(it, NEW_DOM)
+            assertEquals(it!!.document, "v0")
+            assertEquals(it.dom, NEW_DOM)
         }
     }
 
     @Test
     fun `initialized to initialized is stored`() {
-        store.storeInitial(TEST_URI, STORED_DOM)
-        store.storeInitial(TEST_URI, NEW_DOM)
+        store.storeInitial(TEST_URI, "v0", STORED_DOM)
+        store.storeInitial(TEST_URI, "v0", NEW_DOM)
 
         store[TEST_URI].let {
-            assertNotNull(it)
-            assertEquals(it, NEW_DOM)
+            it!!
+            assertEquals(it.document, "v0")
+            assertEquals(it.dom, NEW_DOM)
         }
     }
 
     @Test
     fun `null to versioned is stored`() {
-        store.storeVersioned(TEST_URI, 1, NEW_DOM)
+        store.storeVersioned(TEST_URI, 1, "v1", NEW_DOM)
 
         store[TEST_URI].let {
-            assertNotNull(it)
-            assertEquals(it, NEW_DOM)
+            it!!
+            assertEquals(it.document, "v1")
         }
     }
 
     @Test
     fun `initialized to versioned is stored`() {
-        store.storeInitial(TEST_URI, STORED_DOM)
-        store.storeVersioned(TEST_URI, 1, NEW_DOM)
+        store.storeInitial(TEST_URI, "v0", STORED_DOM)
+        store.storeVersioned(TEST_URI, 1, "v1", NEW_DOM)
 
         store[TEST_URI].let {
-            assertNotNull(it)
-            assertEquals(it, NEW_DOM)
+            it!!
+            assertEquals(it.document, "v1")
+            assertEquals(it.dom, NEW_DOM)
         }
     }
 
     @Test
     fun `higher versions are stored`() {
-        store.storeVersioned(TEST_URI, 1, STORED_DOM)
-        store.storeVersioned(TEST_URI, 2, NEW_DOM)
+        store.storeVersioned(TEST_URI, 1, "v2", STORED_DOM)
+        store.storeVersioned(TEST_URI, 2, "v1", NEW_DOM)
 
         store[TEST_URI].let {
-            assertNotNull(it)
-            assertEquals(it, NEW_DOM)
+            it!!
+            assertEquals(it.document, "v1")
+            assertEquals(it.dom, NEW_DOM)
         }
     }
 
     @Test
     fun `version is not replaced if lower`() {
-        store.storeVersioned(TEST_URI, 2, STORED_DOM)
-        store.storeVersioned(TEST_URI, 1, NEW_DOM)
+        store.storeVersioned(TEST_URI, 2, "v2", STORED_DOM)
+        store.storeVersioned(TEST_URI, 1, "v1", NEW_DOM)
 
         store[TEST_URI].let {
-            assertNotNull(it)
-            assertEquals(it, STORED_DOM)
+            it!!
+            assertEquals(it.document, "v2")
+            assertEquals(it.dom, STORED_DOM)
         }
     }
 

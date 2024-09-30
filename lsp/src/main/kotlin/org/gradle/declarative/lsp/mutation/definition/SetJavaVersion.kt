@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.mutation
+package org.gradle.declarative.lsp.mutation.definition
 
 import org.gradle.declarative.dsl.schema.AnalysisSchema
 import org.gradle.declarative.lsp.extension.findPropertyNamed
@@ -36,8 +36,8 @@ class SetJavaVersion : MutationDefinition {
     override val parameters: List<MutationParameter<*>> = listOf(
         MutationParameter(
             "javaVersion",
-            "Java Version",
-            MutationParameterKind.StringParameter
+            "The new Java version.",
+            MutationParameterKind.IntParameter
         )
     )
 

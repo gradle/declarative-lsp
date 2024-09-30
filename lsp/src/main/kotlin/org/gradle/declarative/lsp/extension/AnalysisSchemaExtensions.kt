@@ -2,7 +2,6 @@ package org.gradle.declarative.lsp.extension
 
 import org.gradle.declarative.dsl.schema.AnalysisSchema
 import org.gradle.declarative.dsl.schema.DataClass
-import org.gradle.internal.declarativedsl.dom.mutation.TypedMember
 
 /*
  * Copyright 2024 the original author or authors.
@@ -22,18 +21,3 @@ import org.gradle.internal.declarativedsl.dom.mutation.TypedMember
 
 fun AnalysisSchema.typeByFqn(name: String): DataClass =
     dataClassesByFqName.entries.single { it.key.qualifiedName == name }.value
-
-val AnalysisSchema.lintEnabled: TypedMember.TypedProperty
-    get() = typeByFqn("org.gradle.api.experimental.common.extensions.Lint").propertyNamed("enabled")
-
-val AnalysisSchema.hasLibraryDependencies: DataClass
-    get() = typeByFqn("org.gradle.api.experimental.common.HasLibraryDependencies")
-
-val AnalysisSchema.hasApplicationDependencies: DataClass
-    get() = typeByFqn("org.gradle.api.experimental.common.HasApplicationDependencies")
-
-fun AnalysisSchema.hasCommonPrototype(): Boolean =
-    dataClassesByFqName.keys.any { it.qualifiedName == "org.gradle.api.experimental.common.LibraryDependencies" }
-
-fun AnalysisSchema.hasCommonDependencies(): Boolean =
-    dataClassesByFqName.keys.any { it.qualifiedName == "org.gradle.api.experimental.common.HasLibraryDependencies" }

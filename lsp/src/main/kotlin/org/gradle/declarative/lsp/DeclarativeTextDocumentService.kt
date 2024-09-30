@@ -16,7 +16,6 @@
 
 package org.gradle.declarative.lsp
 
-import org.eclipse.lsp4j.ClientCapabilities
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionParams
 import org.eclipse.lsp4j.Command
@@ -40,7 +39,6 @@ import org.eclipse.lsp4j.SignatureHelpParams
 import org.eclipse.lsp4j.SignatureInformation
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
-import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.dsl.schema.AnalysisSchema
 import org.gradle.declarative.dsl.schema.DataClass
@@ -49,11 +47,10 @@ import org.gradle.declarative.dsl.schema.DataType
 import org.gradle.declarative.dsl.schema.DataTypeRef
 import org.gradle.declarative.dsl.schema.FunctionSemantics
 import org.gradle.declarative.dsl.schema.SchemaFunction
-import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel
-import org.gradle.declarative.lsp.extension.containsRange
-import org.gradle.declarative.lsp.extension.toJsonMap
+import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.toLspRange
-import org.gradle.declarative.lsp.mutation.SetJavaVersion
+import org.gradle.declarative.lsp.service.MutationRegistry
+import org.gradle.declarative.lsp.service.VersionedDocumentStore
 import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
@@ -61,58 +58,53 @@ import org.gradle.declarative.lsp.visitor.visit
 import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
-import org.gradle.internal.declarativedsl.dom.mutation.MutationApplicability
-import org.gradle.internal.declarativedsl.dom.mutation.MutationApplicabilityChecker
-import org.gradle.internal.declarativedsl.dom.mutation.MutationDefinition
+import org.gradle.internal.declarativedsl.dom.mutation.MutationParameterKind
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
 import org.slf4j.LoggerFactory
-import java.io.File
 import java.net.URI
 import java.util.concurrent.CompletableFuture
 
 private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::class.java)
 
-class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware {
-    private val documentStore = VersionedDocumentStore()
-    private val mutations = listOf(
-        SetJavaVersion()
-    )
-    private var applicableMutations: List<Pair<MutationDefinition, MutationApplicability>> = emptyList()
+class DeclarativeTextDocumentService : TextDocumentService {
 
     private lateinit var client: LanguageClient
-    private lateinit var clientCapabilities: ClientCapabilities
-    private lateinit var resources: ResolvedDeclarativeResourcesModel
+    private lateinit var documentStore: VersionedDocumentStore
+    private lateinit var mutationRegistry: MutationRegistry
+    private lateinit var declarativeResources: DeclarativeResourcesModel
+    private lateinit var analysisSchema: AnalysisSchema
+    private lateinit var schemaAnalysisEvaluator: SimpleAnalysisEvaluator
 
-    private lateinit var schemaEvaluator: SimpleAnalysisEvaluator
+    fun initialize(
+        client: LanguageClient,
+        documentStore: VersionedDocumentStore,
+        mutationRegistry: MutationRegistry,
+        declarativeResources: DeclarativeResourcesModel
+    ) {
+        this.client = client
+        this.documentStore = documentStore
+        this.mutationRegistry = mutationRegistry
+        this.declarativeResources = declarativeResources
 
-    override fun connect(client: LanguageClient?) {
-        this.client = client!!
+        this.analysisSchema = declarativeResources.analysisSchema
+        this.schemaAnalysisEvaluator = SimpleAnalysisEvaluator.withSchema(
+            declarativeResources.settingsInterpretationSequence,
+            declarativeResources.projectInterpretationSequence
+        )
     }
 
     // LSP Functions ---------------------------------------------------------------------------------------------------
-
-    fun setClientCapabilities(clientCapabilities: ClientCapabilities) {
-        this.clientCapabilities = clientCapabilities
-    }
-
-    fun setResources(resources: ResolvedDeclarativeResourcesModel) {
-        this.resources = resources
-        schemaEvaluator = SimpleAnalysisEvaluator.withSchema(
-            resources.settingsInterpretationSequence, resources.projectInterpretationSequence
-        )
-    }
 
     override fun didOpen(params: DidOpenTextDocumentParams?) {
         LOGGER.trace("Opened document: {}", params)
         params?.let {
             val uri = URI(it.textDocument.uri)
-            val text = File(uri).readText()
-            val document = parse(uri, text)
-            documentStore.storeInitial(uri, document)
-
+            val text = it.textDocument.text
+            val dom = parse(uri, text)
+            documentStore.storeInitial(uri, text, dom)
             processDocument(uri)
         }
     }
@@ -122,11 +114,10 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         params?.let {
             val uri = URI(it.textDocument.uri)
             it.contentChanges.forEach { change ->
-                documentStore.storeVersioned(
-                    uri,
-                    it.textDocument.version,
-                    parse(uri, change.text)
-                )
+                val version = it.textDocument.version
+                val text = change.text
+                val dom = parse(uri, change.text)
+                documentStore.storeVersioned(uri, version, text, dom)
                 processDocument(uri)
             }
         }
@@ -148,7 +139,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         LOGGER.trace("Hover requested for position: {}", params)
         val hover = params?.let {
             val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom ->
+            withDom(uri) { dom, _ ->
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
                 val visitor = BestFittingNodeVisitor(
                     params.position,
@@ -175,7 +166,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         LOGGER.trace("Completion requested for position: {}", params)
         val completions = params?.let {
             val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom ->
+            withDom(uri) { dom, _ ->
                 dom.document.visit(
                     BestFittingNodeVisitor(
                         params.position,
@@ -184,8 +175,8 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
                 ).bestFittingNode
                     ?.getDataClass(dom.overlayResolutionContainer)
                     ?.let { dataClass ->
-                        computePropertyCompletions(dataClass, resources.analysisSchema) +
-                                computeFunctionCompletions(dataClass, resources.analysisSchema)
+                        computePropertyCompletions(dataClass, analysisSchema) +
+                                computeFunctionCompletions(dataClass, analysisSchema)
                     }
             }
         }.orEmpty().toMutableList()
@@ -197,7 +188,7 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
 
         val signatureInformationList = params?.let {
             val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom ->
+            withDom(uri) { dom, _ ->
                 val position = it.position
                 val matchingNodes = dom.document.visit(
                     BestFittingNodeVisitor(
@@ -227,40 +218,45 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
     }
 
     override fun codeAction(params: CodeActionParams?): CompletableFuture<MutableList<Either<Command, CodeAction>>> {
-        val codeActions: List<Either<Command, CodeAction>> = params?.let {
-            val uri = URI(params.textDocument.uri)
-            withDom(uri) { dom ->
-                applicableMutations.mapNotNull { (mutation, applicability) ->
-                    when (applicability) {
-                        is MutationApplicability.AffectedNode ->
-                            if (applicability.node.sourceData.toLspRange().containsRange(params.range)) {
-                                mutation
-                            } else {
-                                null
+        LOGGER.trace("Code action requested: {}", params)
+        val mutations: List<Either<Command, CodeAction>> = params?.let {
+            val uri = URI(it.textDocument.uri)
+            mutationRegistry.getApplicableMutations(uri, params.range).map { mutation ->
+                Command(
+                    mutation.name,
+                    "gradle-dcl.applyMutation",
+                    listOf(
+                        mapOf(
+                            "documentUri" to it.textDocument.uri,
+                            "mutationId" to mutation.id,
+                            "mutationParameters" to mutation.parameters.map { parameter ->
+                                mapOf(
+                                    "name" to parameter.name,
+                                    "description" to parameter.description,
+                                    "type" to when (parameter.kind) {
+                                        MutationParameterKind.BooleanParameter -> "boolean"
+                                        MutationParameterKind.IntParameter -> "int"
+                                        MutationParameterKind.StringParameter -> "string"
+                                    }
+                                )
                             }
-
-                        is MutationApplicability.ScopeWithoutAffectedNodes ->
-                            mutation
-                    }?.let {
-                        Command(mutation.name, "gradle-dcl.applyMutation").apply {
-                            arguments = mutation.parameters.map { it.toJsonMap() }
-                        }
-                    }
-                }
+                        )
+                    )
+                )
             }
         }.orEmpty().map {
             Either.forLeft(it)
         }
 
-        return CompletableFuture.completedFuture(codeActions.toMutableList())
+        return CompletableFuture.completedFuture(mutations.toMutableList())
     }
 
     // Utility and other member functions ------------------------------------------------------------------------------
 
-    private fun processDocument(uri: URI) = withDom(uri) { dom ->
+    private fun processDocument(uri: URI) = withDom(uri) { dom, _ ->
         reportSyntaxErrors(uri, dom)
         reportSemanticErrors(uri, dom)
-        collectApplicableMutations(dom)
+        mutationRegistry.registerDocument(uri, dom.result)
     }
 
     /**
@@ -300,20 +296,11 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         )
     }
 
-    private fun collectApplicableMutations(dom: DocumentOverlayResult) {
-        val applicabilityChecker = MutationApplicabilityChecker(resources.analysisSchema, dom.result)
-        applicableMutations = mutations.flatMap { mutation ->
-            applicabilityChecker.checkApplicability(mutation).map {
-                Pair(mutation, it)
-            }
-        }
-    }
-
     private fun parse(uri: URI, text: String): DocumentOverlayResult {
         val fileName = uri.path.substringAfterLast('/')
-        val fileSchema = schemaEvaluator.evaluate(fileName, text)
-        val settingsSchema = schemaEvaluator.evaluate(
-            resources.settingsFile.name, resources.settingsFile.readText()
+        val fileSchema = schemaAnalysisEvaluator.evaluate(fileName, text)
+        val settingsSchema = schemaAnalysisEvaluator.evaluate(
+            declarativeResources.settingsFile.name, declarativeResources.settingsFile.readText()
         )
 
         val document = AnalysisDocumentUtils.documentWithModelDefaults(settingsSchema, fileSchema)
@@ -325,9 +312,9 @@ class DeclarativeTextDocumentService : TextDocumentService, LanguageClientAware 
         return document!!
     }
 
-    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult) -> T): T? {
-        return documentStore[uri]?.let { document ->
-            work(document)
+    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, String) -> T): T? {
+        return documentStore[uri].let { entry ->
+            work(entry.dom, entry.document)
         }
     }
 

@@ -19,7 +19,7 @@ package org.gradle.declarative.lsp.build.action;
 import org.gradle.declarative.dsl.evaluation.InterpretationSequence;
 import org.gradle.declarative.dsl.schema.AnalysisSchema;
 import org.gradle.declarative.dsl.tooling.models.DeclarativeSchemaModel;
-import org.gradle.declarative.lsp.build.model.ResolvedDeclarativeResourcesModel;
+import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel;
 import org.gradle.internal.Pair;
 import org.gradle.tooling.BuildAction;
 import org.gradle.tooling.BuildController;
@@ -30,15 +30,15 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-public class GetDeclarativeResourcesModel implements BuildAction<ResolvedDeclarativeResourcesModel> {
+public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeResourcesModel> {
 
     @Override
-    public ResolvedDeclarativeResourcesModel execute(BuildController controller) {
+    public DeclarativeResourcesModel execute(BuildController controller) {
         DeclarativeSchemaModel declarativeSchemaModel = controller.getModel(DeclarativeSchemaModel.class);
         InterpretationSequence settingsSchema = declarativeSchemaModel.getSettingsSequence();
         InterpretationSequence projectSchema = declarativeSchemaModel.getProjectSequence();
         Pair<File, List<File>> buildFiles = getDeclarativeBuildFiles(controller);
-        return new ResolvedDeclarativeResourcesModelImpl(settingsSchema, projectSchema, buildFiles.getLeft(), buildFiles.getRight());
+        return new DeclarativeResourcesModelImpl(settingsSchema, projectSchema, buildFiles.getLeft(), buildFiles.getRight());
     }
 
     private static Pair<File, List<File>> getDeclarativeBuildFiles(BuildController controller) {
@@ -57,14 +57,14 @@ public class GetDeclarativeResourcesModel implements BuildAction<ResolvedDeclara
     }
 
     
-    private static final class ResolvedDeclarativeResourcesModelImpl implements ResolvedDeclarativeResourcesModel {
+    private static final class DeclarativeResourcesModelImpl implements DeclarativeResourcesModel {
 
         private final InterpretationSequence settingsSequence;
         private final InterpretationSequence projectSequence;
         private final File rootDir;
         private final List<File> declarativeBuildFiles;
 
-        public ResolvedDeclarativeResourcesModelImpl(
+        public DeclarativeResourcesModelImpl(
                 InterpretationSequence settingsSequence,
                 InterpretationSequence projectSequence,
                 File rootDir, 

@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp
+package org.gradle.declarative.lsp.service
 
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
-import org.slf4j.LoggerFactory
 import java.net.URI
 
 /**
@@ -30,16 +29,16 @@ class VersionedDocumentStore {
 
     private val store = mutableMapOf<URI, DocumentStoreEntry>()
 
-    operator fun get(uri: URI): DocumentOverlayResult? {
-        return store[uri]?.document
+    operator fun get(uri: URI): DocumentStoreEntry {
+        return store[uri]!!
     }
 
-    fun storeInitial(uri: URI, document: DocumentOverlayResult) {
-        store(uri, DocumentStoreEntry.Initial(document))
+    fun storeInitial(uri: URI, document: String, dom: DocumentOverlayResult) {
+        store(uri, DocumentStoreEntry.Initial(document, dom))
     }
 
-    fun storeVersioned(uri: URI, version: Int, document: DocumentOverlayResult) {
-        store(uri, DocumentStoreEntry.Versioned(version, document))
+    fun storeVersioned(uri: URI, version: Int, document: String, dom: DocumentOverlayResult) {
+        store(uri, DocumentStoreEntry.Versioned(version, document, dom))
     }
 
     /**
@@ -70,14 +69,24 @@ class VersionedDocumentStore {
         store.remove(uri)
     }
 
-    companion object {
-        private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::class.java)
-    }
-
     sealed class DocumentStoreEntry {
-        abstract val document: DocumentOverlayResult
 
-        data class Initial(override val document: DocumentOverlayResult) : DocumentStoreEntry()
-        data class Versioned(val version: Int, override val document: DocumentOverlayResult) : DocumentStoreEntry()
+        abstract val document: String
+        abstract val dom: DocumentOverlayResult
+
+        // Component 1
+        operator fun component1(): String = document
+        operator fun component2(): DocumentOverlayResult = dom
+
+        class Initial(
+            override val document: String,
+            override val dom: DocumentOverlayResult
+        ) : DocumentStoreEntry()
+
+        class Versioned(
+            val version: Int,
+            override val document: String,
+            override val dom: DocumentOverlayResult,
+        ) : DocumentStoreEntry()
     }
 }

@@ -26,7 +26,7 @@ import java.util.List;
 /**
  * Model holding all required information to make a DOM out of the declarative resources in the build.
  */
-public interface ResolvedDeclarativeResourcesModel extends Serializable {
+public interface DeclarativeResourcesModel extends Serializable {
     
     InterpretationSequence getSettingsInterpretationSequence();
     

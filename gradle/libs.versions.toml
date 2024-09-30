@@ -2,19 +2,16 @@
 # https://docs.gradle.org/current/userguide/platforms.html#sub::toml-dependencies-format
 
 [versions]
+gradle-tooling = "8.11-20240930100431+0000"
+declarative-dsl = "8.11-20240930100431+0000"
 detekt = "1.23.6"
 lsp4j = "0.23.1"
 logback = "1.5.6"
 kotlin = "2.0.0"
-kotlinx-coroutines = "1.8.1"
-gradle-tooling = "+"
-declarative-dsl = "+"
 mockk = "1.13.12"
 shadow = "8.3.0"
 
 [libraries]
-kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
-kotlinx-coroutines-core-jvm = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core-jvm", version.ref = "kotlinx-coroutines" }
 lsp4j = { group = "org.eclipse.lsp4j", name = "org.eclipse.lsp4j", version.ref = "lsp4j" }
 logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" }
 gradle-tooling-api = { module = "org.gradle:gradle-tooling-api", version.ref = "gradle-tooling" }

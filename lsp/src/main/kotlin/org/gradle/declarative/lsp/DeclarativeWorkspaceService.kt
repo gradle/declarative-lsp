@@ -93,7 +93,7 @@ class DeclarativeWorkspaceService : WorkspaceService {
         val documentUri = URI(args["documentUri"].asString)
         val fileName = documentUri.path.substringAfterLast('/')
 
-        documentStore[documentUri].let { (document, dom) ->
+        documentStore[documentUri]?.let { (document, dom) ->
             val mutationDefinition = mutationRegistry.getMutationByName(args["mutationId"].asString)!!
             val mutationParamsContainer = JsonBackedArgumentContainer(
                 mutationDefinition,

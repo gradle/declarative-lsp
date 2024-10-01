@@ -313,7 +313,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
     }
 
     private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, String) -> T): T? {
-        return documentStore[uri].let { entry ->
+        return documentStore[uri]?.let { entry ->
             work(entry.dom, entry.document)
         }
     }

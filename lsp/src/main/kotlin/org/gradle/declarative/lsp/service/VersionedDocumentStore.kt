@@ -29,8 +29,8 @@ class VersionedDocumentStore {
 
     private val store = mutableMapOf<URI, DocumentStoreEntry>()
 
-    operator fun get(uri: URI): DocumentStoreEntry {
-        return store[uri]!!
+    operator fun get(uri: URI): DocumentStoreEntry? {
+        return store[uri]
     }
 
     fun storeInitial(uri: URI, document: String, dom: DocumentOverlayResult) {

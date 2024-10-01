@@ -19,10 +19,16 @@ package org.gradle.declarative.lsp
 import org.gradle.declarative.lsp.build.action.GetDeclarativeResourcesModel
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.tooling.GradleConnector
+import org.gradle.tooling.ProgressEvent
+import org.gradle.tooling.ProgressListener
 import org.gradle.tooling.ProjectConnection
+import org.slf4j.LoggerFactory
 import java.io.File
 
-class TapiConnectionHandler(val projectRoot: File) {
+private val LOGGER = LoggerFactory.getLogger(TapiConnectionHandler::class.java)
+
+class TapiConnectionHandler(val projectRoot: File): ProgressListener {
+
     fun getDomPrequisites(): DeclarativeResourcesModel {
         var connection: ProjectConnection? = null
         try {
@@ -30,9 +36,16 @@ class TapiConnectionHandler(val projectRoot: File) {
                 .newConnector()
                 .forProjectDirectory(projectRoot)
                 .connect()
-            return connection.action(GetDeclarativeResourcesModel()).run()
+            return connection
+                .action(GetDeclarativeResourcesModel())
+                .addProgressListener(this)
+                .run()
         } finally {
             connection?.close()
         }
+    }
+
+    override fun statusChanged(event: ProgressEvent?) {
+        LOGGER.info("${event?.description}")
     }
 }

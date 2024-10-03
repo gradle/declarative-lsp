@@ -17,7 +17,9 @@
 package org.gradle.declarative.lsp.mutation.definition
 
 import org.gradle.declarative.dsl.schema.AnalysisSchema
-import org.gradle.declarative.lsp.extension.typeByFqn
+import org.gradle.declarative.dsl.schema.DataClass
+import org.gradle.declarative.lsp.extension.findMethodNamed
+import org.gradle.declarative.lsp.extension.findType
 import org.gradle.internal.declarativedsl.dom.mutation.ModelMutation
 import org.gradle.internal.declarativedsl.dom.mutation.ModelMutationRequest
 import org.gradle.internal.declarativedsl.dom.mutation.MutationDefinition
@@ -28,9 +30,11 @@ import org.gradle.internal.declarativedsl.dom.mutation.ScopeLocation
 import org.gradle.internal.declarativedsl.dom.mutation.elementFromString
 import org.gradle.internal.declarativedsl.dom.mutation.inObjectsConfiguredBy
 import org.gradle.internal.declarativedsl.dom.mutation.inObjectsOfType
-import org.gradle.internal.declarativedsl.schemaUtils.singleFunctionNamed
 
-class AddDependency: MutationDefinition {
+private const val CONTAINER_CLASS = "org.gradle.api.experimental.common.HasLibraryDependencies"
+private const val ADD_DEPENDENCY_METHOD = "dependencies"
+
+class AddLibraryDependency : MutationDefinition {
     override val id: String = "addDependency"
     override val name: String = "Add Dependency"
     override val description: String = "Add a dependency to the project"
@@ -42,32 +46,30 @@ class AddDependency: MutationDefinition {
         ),
         MutationParameter(
             "coordinate",
-            "The coordinate of the dependency (e.g. \"g:a:v\"). Also can be more complex, scoped coordinate (e.g. \"project(':subproject')\").",
+            """ The coordinate of the dependency (e.g. \"g:a:v\"). 
+                |Also can be more complex, scoped coordinate (e.g. \"project(':subproject')\").""".trimMargin(),
             MutationParameterKind.StringParameter
         )
     )
 
     override fun isCompatibleWithSchema(projectAnalysisSchema: AnalysisSchema): Boolean =
-        projectAnalysisSchema
-            .dataClassTypesByFqName
-            .keys
-            .any { it.qualifiedName == "org.gradle.api.experimental.common.HasLibraryDependencies" }
+        projectAnalysisSchema.findType<DataClass>(CONTAINER_CLASS) != null
 
     override fun defineModelMutationSequence(projectAnalysisSchema: AnalysisSchema): List<ModelMutationRequest> {
-        val scopeForDependenciesBlock = ScopeLocation.fromTopLevel().inObjectsOfType(
-            projectAnalysisSchema.typeByFqn("org.gradle.api.experimental.common.HasLibraryDependencies")
-        )
-        val dependenciesFunction = projectAnalysisSchema
-            .typeByFqn("org.gradle.api.experimental.common.HasLibraryDependencies")
-            .singleFunctionNamed("dependencies")
+        val containerClass = projectAnalysisSchema.findType<DataClass>(CONTAINER_CLASS)!!
+        val containerAddDependencyMethod = containerClass.findMethodNamed(ADD_DEPENDENCY_METHOD)!!
+
+        val scopeForDependenciesBlock = ScopeLocation
+            .fromTopLevel()
+            .inObjectsOfType(containerClass)
 
         return listOf(
             ModelMutationRequest(
                 scopeForDependenciesBlock,
-                ModelMutation.AddConfiguringBlockIfAbsent(dependenciesFunction)
+                ModelMutation.AddConfiguringBlockIfAbsent(containerAddDependencyMethod)
             ),
             ModelMutationRequest(
-                scopeForDependenciesBlock.inObjectsConfiguredBy(dependenciesFunction),
+                scopeForDependenciesBlock.inObjectsConfiguredBy(containerAddDependencyMethod),
                 ModelMutation.AddNewElement(
                     NewElementNodeProvider.ArgumentBased { args ->
                         elementFromString(

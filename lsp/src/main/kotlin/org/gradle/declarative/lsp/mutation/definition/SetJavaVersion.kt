@@ -17,8 +17,9 @@
 package org.gradle.declarative.lsp.mutation.definition
 
 import org.gradle.declarative.dsl.schema.AnalysisSchema
+import org.gradle.declarative.dsl.schema.DataClass
 import org.gradle.declarative.lsp.extension.findPropertyNamed
-import org.gradle.declarative.lsp.extension.typeByFqn
+import org.gradle.declarative.lsp.extension.findType
 import org.gradle.internal.declarativedsl.dom.mutation.ModelMutation
 import org.gradle.internal.declarativedsl.dom.mutation.ModelMutationRequest
 import org.gradle.internal.declarativedsl.dom.mutation.MutationDefinition
@@ -28,6 +29,8 @@ import org.gradle.internal.declarativedsl.dom.mutation.NewValueNodeProvider
 import org.gradle.internal.declarativedsl.dom.mutation.ScopeLocation
 import org.gradle.internal.declarativedsl.dom.mutation.inObjectsOfType
 import org.gradle.internal.declarativedsl.dom.mutation.valueFromString
+
+private const val CONTAINER_CLASS = "org.gradle.api.experimental.jvm.HasJavaTarget"
 
 class SetJavaVersion : MutationDefinition {
     override val id: String = "setJavaVersion"
@@ -42,15 +45,11 @@ class SetJavaVersion : MutationDefinition {
     )
 
     override fun isCompatibleWithSchema(projectAnalysisSchema: AnalysisSchema): Boolean =
-        projectAnalysisSchema
-            .dataClassTypesByFqName
-            .keys
-            .any {
-                it.qualifiedName == "org.gradle.api.experimental.jvm.HasJvmApplication"
-            }
+        projectAnalysisSchema.findType<DataClass>("org.gradle.api.experimental.jvm.HasJavaTarget") != null
 
     override fun defineModelMutationSequence(projectAnalysisSchema: AnalysisSchema): List<ModelMutationRequest> {
-        val hasJavaTargetType = projectAnalysisSchema.typeByFqn("org.gradle.api.experimental.jvm.HasJavaTarget")
+        val hasJavaTargetType =
+            projectAnalysisSchema.findType<DataClass>("org.gradle.api.experimental.jvm.HasJavaTarget")!!
 
         return listOf(
             ModelMutationRequest(

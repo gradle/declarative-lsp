@@ -22,7 +22,5 @@ import org.gradle.internal.declarativedsl.dom.mutation.TypedMember
 fun DataClass.findPropertyNamed(name: String): TypedMember.TypedProperty? =
     properties.find { it.name == name }?.let { TypedMember.TypedProperty(this, it) }
 
-
-fun DataClass.propertyNamed(name: String): TypedMember.TypedProperty =
-    findPropertyNamed(name)
-        ?: throw NoSuchElementException("no property named $name was found in the type $this")
+fun DataClass.findMethodNamed(name: String): TypedMember.TypedFunction? =
+    memberFunctions.find { it.simpleName == name }?.let { TypedMember.TypedFunction(this, it) }

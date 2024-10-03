@@ -1,8 +1,6 @@
 package org.gradle.declarative.lsp.extension
 
 import org.gradle.declarative.dsl.schema.AnalysisSchema
-import org.gradle.declarative.dsl.schema.DataClass
-import org.gradle.declarative.dsl.schema.EnumClass
 
 /*
  * Copyright 2024 the original author or authors.
@@ -20,14 +18,10 @@ import org.gradle.declarative.dsl.schema.EnumClass
  * limitations under the License.
  */
 
-fun AnalysisSchema.typeByFqn(name: String): DataClass {
-    val type = dataClassTypesByFqName
-        .entries
-        .single { it.key.qualifiedName == name }
-        .value
-
-    return when (type) {
-        is DataClass -> type
-        is EnumClass -> error("Expected a data class type, but got an enum class type")
+inline fun <reified T> AnalysisSchema.findType(name: String): T? = dataClassTypesByFqName
+    .values
+    .find { dataClass ->
+        dataClass.name.qualifiedName == name && dataClass is T
+    }?.let {
+        it as T
     }
-}

@@ -32,7 +32,7 @@ import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.eclipse.lsp4j.services.WorkspaceService
-import org.gradle.declarative.lsp.mutation.definition.AddDependency
+import org.gradle.declarative.lsp.mutation.definition.AddLibraryDependency
 import org.gradle.declarative.lsp.mutation.definition.SetJavaVersion
 import org.gradle.declarative.lsp.service.MutationRegistry
 import org.gradle.declarative.lsp.service.VersionedDocumentStore
@@ -100,7 +100,7 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
                 declarativeResources,
                 listOf(
                     SetJavaVersion(),
-                    AddDependency()
+                    AddLibraryDependency()
                 )
             )
 
@@ -142,7 +142,6 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(DeclarativeLanguageServer::class.java)
-
         private const val MODEL_FETCH_PROGRESS_TOKEN = "modelFetchProgress"
     }
 

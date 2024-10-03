@@ -26,7 +26,7 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":model"))
+    implementation(project(":tapi-model"))
 
     implementation(libs.lsp4j)
     implementation(libs.logback.classic)

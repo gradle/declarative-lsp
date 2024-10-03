@@ -32,5 +32,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "declarative-lsp"
-include("model")
+include("tapi-model")
 include("lsp")

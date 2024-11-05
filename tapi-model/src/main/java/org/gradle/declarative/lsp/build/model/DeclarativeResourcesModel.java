@@ -23,7 +23,7 @@ import java.io.File;
 import java.io.Serializable;
 import java.util.List;
 
-/**
+/**w
  * Model holding all required information to make a DOM out of the declarative resources in the build.
  */
 public interface DeclarativeResourcesModel extends Serializable {

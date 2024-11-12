@@ -26,9 +26,10 @@ import org.gradle.tooling.BuildController;
 import org.gradle.tooling.model.gradle.GradleBuild;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeResourcesModel> {
@@ -104,13 +105,14 @@ public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeReso
         @Override
         public File getSettingsFile() {
             // TODO: this is an assumption about the location of the settings file – get it from Gradle instead.
-            List<File> candidateFiles = Stream.of("settings.gradle.dcl", "settings.gradle.kts")
-                    .map(it -> new File(getRootDir(), "settings.gradle.dcl"))
-                    .collect(Collectors.toList());
-            return candidateFiles.stream()
+            List<String> candidateFileNames = Arrays.asList("settings.gradle.dcl", "settings.gradle.kts");
+            Function<String, File> asFileInRootDirectory = it -> new File(getRootDir(), it);
+
+            return candidateFileNames.stream()
+                    .map(asFileInRootDirectory)
                     .filter(File::exists)
                     .findFirst()
-                    .orElse(candidateFiles.get(0));
+                    .orElse(asFileInRootDirectory.apply(candidateFileNames.get(0)));
         }
 
         @Override

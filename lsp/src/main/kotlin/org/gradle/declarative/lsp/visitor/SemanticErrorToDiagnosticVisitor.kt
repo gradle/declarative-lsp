@@ -26,6 +26,7 @@ import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.IsError
 import org.gradle.internal.declarativedsl.dom.NonEnumValueNamedReference
 import org.gradle.internal.declarativedsl.dom.NotAssignable
+import org.gradle.internal.declarativedsl.dom.OpaqueValueInIdentityKey
 import org.gradle.internal.declarativedsl.dom.ResolutionFailureReason
 import org.gradle.internal.declarativedsl.dom.UnresolvedBase
 import org.gradle.internal.declarativedsl.dom.UnresolvedName
@@ -65,6 +66,7 @@ class SemanticErrorToDiagnosticVisitor(private val documentOverlayResult: Docume
         UnresolvedValueUsed -> "Unresolved value used"
         ValueTypeMismatch -> "Value type mismatch"
         NonEnumValueNamedReference -> "Non-enum value named reference"
+        OpaqueValueInIdentityKey -> "Non-literal value used as identity key"
     }
 
 }

@@ -40,13 +40,7 @@ import org.eclipse.lsp4j.SignatureInformation
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.TextDocumentService
-import org.gradle.declarative.dsl.schema.AnalysisSchema
-import org.gradle.declarative.dsl.schema.DataClass
-import org.gradle.declarative.dsl.schema.DataParameter
-import org.gradle.declarative.dsl.schema.DataType
-import org.gradle.declarative.dsl.schema.DataTypeRef
-import org.gradle.declarative.dsl.schema.FunctionSemantics
-import org.gradle.declarative.dsl.schema.SchemaFunction
+import org.gradle.declarative.dsl.schema.*
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.toLspRange
 import org.gradle.declarative.lsp.service.MutationRegistry
@@ -403,9 +397,9 @@ private fun computeTypedPlaceholder(
     type: DataTypeRef,
     analysisSchema: AnalysisSchema
 ): String {
-    val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(type)
-    return when (resolvedType) {
+    return when (val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(type)) {
         is DataType.BooleanDataType -> "\${$index|true,false|}"
+        is EnumClass -> "\${$index|${resolvedType.entryNames.joinToString(",")}|}"
         is DataType.IntDataType -> "\${$index:0}"
         is DataType.LongDataType -> "\${$index:0L}"
         is DataType.StringDataType -> "\"\${$index}\""

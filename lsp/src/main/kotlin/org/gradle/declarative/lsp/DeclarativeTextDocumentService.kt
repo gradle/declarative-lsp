@@ -308,7 +308,8 @@ class DeclarativeTextDocumentService : TextDocumentService {
         val fileName = uri.path.substringAfterLast('/')
         val fileSchema = schemaAnalysisEvaluator.evaluate(fileName, text)
         val settingsSchema = schemaAnalysisEvaluator.evaluate(
-            declarativeResources.settingsFile.name, declarativeResources.settingsFile.readText()
+            declarativeResources.settingsFile.name, 
+            declarativeResources.settingsFile.takeIf { it.canRead() }?.readText().orEmpty()
         )
 
         val document = AnalysisDocumentUtils.documentWithModelDefaults(settingsSchema, fileSchema)

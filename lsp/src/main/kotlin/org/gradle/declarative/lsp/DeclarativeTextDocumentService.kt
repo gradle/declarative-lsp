@@ -104,8 +104,12 @@ class DeclarativeTextDocumentService : TextDocumentService {
             val uri = URI(it.textDocument.uri)
             val text = it.textDocument.text
             val dom = parse(uri, text)
-            documentStore.storeInitial(uri, text, dom)
-            processDocument(uri)
+            if (dom != null) {
+                documentStore.storeInitial(uri, text, dom)
+                processDocument(uri)
+            } else {
+                documentStore.remove(uri)
+            }
         }
     }
 
@@ -117,8 +121,12 @@ class DeclarativeTextDocumentService : TextDocumentService {
                 val version = it.textDocument.version
                 val text = change.text
                 val dom = parse(uri, change.text)
-                documentStore.storeVersioned(uri, version, text, dom)
-                processDocument(uri)
+                if (dom != null) {
+                    documentStore.storeVersioned(uri, version, text, dom)
+                    processDocument(uri)
+                } else {
+                    documentStore.remove(uri)
+                }
             }
         }
     }
@@ -296,7 +304,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         )
     }
 
-    private fun parse(uri: URI, text: String): DocumentOverlayResult {
+    private fun parse(uri: URI, text: String): DocumentOverlayResult? {
         val fileName = uri.path.substringAfterLast('/')
         val fileSchema = schemaAnalysisEvaluator.evaluate(fileName, text)
         val settingsSchema = schemaAnalysisEvaluator.evaluate(

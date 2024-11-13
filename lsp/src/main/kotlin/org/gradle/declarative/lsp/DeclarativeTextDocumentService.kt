@@ -59,10 +59,13 @@ import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.mutation.MutationParameterKind
+import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlay
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
-import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils
+import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils.resolvedDocument
+import org.gradle.internal.declarativedsl.evaluator.main.AnalysisSequenceResult
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
+import org.gradle.internal.declarativedsl.evaluator.runner.stepResultOrPartialResult
 import org.slf4j.LoggerFactory
 import java.net.URI
 import java.util.concurrent.CompletableFuture
@@ -297,20 +300,23 @@ class DeclarativeTextDocumentService : TextDocumentService {
     }
 
     private fun parse(uri: URI, text: String): DocumentOverlayResult {
+        fun AnalysisSequenceResult.lastStepDocument() =
+            stepResults.values.last().stepResultOrPartialResult.resolvedDocument()
+        
         val fileName = uri.path.substringAfterLast('/')
-        val fileSchema = schemaAnalysisEvaluator.evaluate(fileName, text)
-        val settingsSchema = schemaAnalysisEvaluator.evaluate(
-            declarativeResources.settingsFile.name, 
-            declarativeResources.settingsFile.takeIf { it.canRead() }?.readText().orEmpty()
-        )
+        val document = schemaAnalysisEvaluator.evaluate(fileName, text).lastStepDocument()
+        
+        // Workaround: for now, the mutation utilities cannot handle mutations that touch the underlay document content.
+        // To avoid that, use an empty document as an underlay instead of the real document produced from the
+        // settings file.
+        // TODO: carry both the real overlay and the document produced from just the current file, run the mutations
+        //       against the latter for now.
+        // TODO: once the mutation utilities start handling mutations across the overlay, pass them the right overlay.
+        val emptyUnderlay = schemaAnalysisEvaluator.evaluate("empty-underlay/build.gradle.dcl", "").lastStepDocument()
+        
+        LOGGER.trace("Parsed declarative model for document: {}", uri)
 
-        val document = AnalysisDocumentUtils.documentWithModelDefaults(settingsSchema, fileSchema)
-        when (document != null) {
-            true -> LOGGER.trace("Parsed declarative model for document: {}", uri)
-            false -> LOGGER.error("Failed to parse declarative model for document: {}", uri)
-        }
-
-        return document!!
+        return DocumentOverlay.overlayResolvedDocuments(emptyUnderlay, document)
     }
 
     private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, String) -> T): T? {

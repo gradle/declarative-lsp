@@ -42,6 +42,7 @@ import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.dsl.schema.*
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
+import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
 import org.gradle.declarative.lsp.extension.toLspRange
 import org.gradle.declarative.lsp.service.MutationRegistry
 import org.gradle.declarative.lsp.service.VersionedDocumentStore
@@ -53,11 +54,9 @@ import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.mutation.MutationParameterKind
-import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlay
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils.resolvedDocument
-import org.gradle.internal.declarativedsl.evaluator.main.AnalysisSequenceResult
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
 import org.gradle.internal.declarativedsl.evaluator.runner.stepResultOrPartialResult
 import org.slf4j.LoggerFactory
@@ -72,7 +71,6 @@ class DeclarativeTextDocumentService : TextDocumentService {
     private lateinit var documentStore: VersionedDocumentStore
     private lateinit var mutationRegistry: MutationRegistry
     private lateinit var declarativeResources: DeclarativeResourcesModel
-    private lateinit var analysisSchema: AnalysisSchema
     private lateinit var schemaAnalysisEvaluator: SimpleAnalysisEvaluator
 
     fun initialize(
@@ -85,8 +83,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         this.documentStore = documentStore
         this.mutationRegistry = mutationRegistry
         this.declarativeResources = declarativeResources
-
-        this.analysisSchema = declarativeResources.analysisSchema
+        
         this.schemaAnalysisEvaluator = SimpleAnalysisEvaluator.withSchema(
             declarativeResources.settingsInterpretationSequence,
             declarativeResources.projectInterpretationSequence
@@ -100,9 +97,9 @@ class DeclarativeTextDocumentService : TextDocumentService {
         params?.let {
             val uri = URI(it.textDocument.uri)
             val text = it.textDocument.text
-            val dom = parse(uri, text)
+            val parsed = parse(uri, text)
             run {
-                documentStore.storeInitial(uri, text, dom)
+                documentStore.storeInitial(uri, text, parsed.documentOverlayResult, parsed.analysisSchemas)
                 processDocument(uri)
             }
         }
@@ -115,8 +112,8 @@ class DeclarativeTextDocumentService : TextDocumentService {
             it.contentChanges.forEach { change ->
                 val version = it.textDocument.version
                 val text = change.text
-                val dom = parse(uri, change.text)
-                documentStore.storeVersioned(uri, version, text, dom)
+                val parsed = parse(uri, change.text)
+                documentStore.storeVersioned(uri, version, text, parsed.documentOverlayResult, parsed.analysisSchemas)
                 processDocument(uri)
             }
         }
@@ -138,7 +135,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         LOGGER.trace("Hover requested for position: {}", params)
         val hover = params?.let {
             val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom, _ ->
+            withDom(uri) { dom, _, _ ->
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
                 val visitor = BestFittingNodeVisitor(
                     params.position,
@@ -163,9 +160,9 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
     override fun completion(params: CompletionParams?): CompletableFuture<Either<MutableList<CompletionItem>, CompletionList>> {
         LOGGER.trace("Completion requested for position: {}", params)
-        val completions = params?.let {
-            val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom, _ ->
+        val completions = params?.let { param ->
+            val uri = URI(param.textDocument.uri)
+            withDom(uri) { dom, schema, _ ->
                 dom.document.visit(
                     BestFittingNodeVisitor(
                         params.position,
@@ -173,9 +170,10 @@ class DeclarativeTextDocumentService : TextDocumentService {
                     )
                 ).bestFittingNode
                     ?.getDataClass(dom.overlayResolutionContainer)
-                    ?.let { dataClass ->
-                        computePropertyCompletions(dataClass, analysisSchema) +
-                                computeFunctionCompletions(dataClass, analysisSchema)
+                    .let { it ?: schema.topLevelReceiverType }
+                    .let { dataClass ->
+                        computePropertyCompletions(dataClass, schema) +
+                            computeFunctionCompletions(dataClass, schema)
                     }
             }
         }.orEmpty().toMutableList()
@@ -187,7 +185,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
         val signatureInformationList = params?.let {
             val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom, _ ->
+            withDom(uri) { dom, _, _ ->
                 val position = it.position
                 val matchingNodes = dom.document.visit(
                     BestFittingNodeVisitor(
@@ -252,10 +250,10 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
     // Utility and other member functions ------------------------------------------------------------------------------
 
-    private fun processDocument(uri: URI) = withDom(uri) { dom, _ ->
+    private fun processDocument(uri: URI) = withDom(uri) { dom, schema, _ ->
         reportSyntaxErrors(uri, dom)
         reportSemanticErrors(uri, dom)
-        mutationRegistry.registerDocument(uri, dom.result)
+        mutationRegistry.registerDocument(uri, schema, dom.result)
     }
 
     /**
@@ -294,30 +292,37 @@ class DeclarativeTextDocumentService : TextDocumentService {
             )
         )
     }
+    
+    data class ParsedDocument(
+        val documentOverlayResult: DocumentOverlayResult,
+        val analysisSchemas: List<AnalysisSchema>
+    )
 
-    private fun parse(uri: URI, text: String): DocumentOverlayResult {
-        fun AnalysisSequenceResult.lastStepDocument() =
-            stepResults.values.last().stepResultOrPartialResult.resolvedDocument()
-        
+    private fun parse(uri: URI, text: String): ParsedDocument {
         val fileName = uri.path.substringAfterLast('/')
-        val document = schemaAnalysisEvaluator.evaluate(fileName, text).lastStepDocument()
+        val analysisResult = schemaAnalysisEvaluator.evaluate(fileName, text)
         
         // Workaround: for now, the mutation utilities cannot handle mutations that touch the underlay document content.
-        // To avoid that, use an empty document as an underlay instead of the real document produced from the
-        // settings file.
+        // To avoid that, use the utility that produces an overlay result with no real underlay content.
+        // This utility also takes care of multi-step resolution results and merges them, presenting .
         // TODO: carry both the real overlay and the document produced from just the current file, run the mutations
         //       against the latter for now.
         // TODO: once the mutation utilities start handling mutations across the overlay, pass them the right overlay.
-        val emptyUnderlay = schemaAnalysisEvaluator.evaluate("empty-underlay/build.gradle.dcl", "").lastStepDocument()
-        
+        val overlay = indexBasedOverlayResultFromDocuments(
+            analysisResult.stepResults.map { it.value.stepResultOrPartialResult.resolvedDocument() }
+        )
+
         LOGGER.trace("Parsed declarative model for document: {}", uri)
 
-        return DocumentOverlay.overlayResolvedDocuments(emptyUnderlay, document)
+        return ParsedDocument(
+            overlay,
+            analysisResult.stepResults.map { it.key.evaluationSchemaForStep.analysisSchema }
+        )
     }
 
-    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, String) -> T): T? {
+    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, AnalysisSchema, String) -> T): T? {
         return documentStore[uri]?.let { entry ->
-            work(entry.dom, entry.document)
+            work(entry.dom, entry.unionSchema, entry.document)
         }
     }
 

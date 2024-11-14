@@ -17,11 +17,9 @@
 package org.gradle.declarative.lsp.build.model;
 
 import org.gradle.declarative.dsl.evaluation.InterpretationSequence;
-import org.gradle.declarative.dsl.schema.AnalysisSchema;
 
 import java.io.File;
 import java.io.Serializable;
-import java.util.List;
 
 /**w
  * Model holding all required information to make a DOM out of the declarative resources in the build.
@@ -32,11 +30,5 @@ public interface DeclarativeResourcesModel extends Serializable {
     
     InterpretationSequence getProjectInterpretationSequence();
 
-    AnalysisSchema getAnalysisSchema();
-
     File getRootDir();
-    
-    File getSettingsFile();
-
-    List<File> getDeclarativeBuildFiles();
 }

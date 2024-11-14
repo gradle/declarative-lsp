@@ -18,6 +18,7 @@ package org.gradle.declarative.lsp.service
 
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.util.Ranges
+import org.gradle.declarative.dsl.schema.AnalysisSchema
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.toLspRange
 import org.gradle.internal.declarativedsl.dom.mutation.MutationApplicability
@@ -37,9 +38,9 @@ class MutationRegistry(
         return possibleMutations.firstOrNull { it.id == name }
     }
 
-    fun registerDocument(uri: URI, documentWithResolution: DocumentWithResolution) {
+    fun registerDocument(uri: URI, schema: AnalysisSchema, documentWithResolution: DocumentWithResolution) {
         val applicabilityChecker =
-            MutationApplicabilityChecker(declarativeResources.analysisSchema, documentWithResolution)
+            MutationApplicabilityChecker(schema, documentWithResolution)
         val applicableMutations = possibleMutations.flatMap { mutation ->
             applicabilityChecker.checkApplicability(mutation).map { applicability -> Pair(mutation, applicability) }
         }

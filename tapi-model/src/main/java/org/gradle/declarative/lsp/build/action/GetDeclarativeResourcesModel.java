@@ -17,20 +17,13 @@
 package org.gradle.declarative.lsp.build.action;
 
 import org.gradle.declarative.dsl.evaluation.InterpretationSequence;
-import org.gradle.declarative.dsl.schema.AnalysisSchema;
 import org.gradle.declarative.dsl.tooling.models.DeclarativeSchemaModel;
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel;
-import org.gradle.internal.Pair;
 import org.gradle.tooling.BuildAction;
 import org.gradle.tooling.BuildController;
 import org.gradle.tooling.model.gradle.GradleBuild;
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.List;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
 public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeResourcesModel> {
 
@@ -39,23 +32,13 @@ public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeReso
         DeclarativeSchemaModel declarativeSchemaModel = controller.getModel(DeclarativeSchemaModel.class);
         InterpretationSequence settingsSchema = declarativeSchemaModel.getSettingsSequence();
         InterpretationSequence projectSchema = declarativeSchemaModel.getProjectSequence();
-        Pair<File, List<File>> buildFiles = getDeclarativeBuildFiles(controller);
-        return new DeclarativeResourcesModelImpl(settingsSchema, projectSchema, buildFiles.getLeft(), buildFiles.getRight());
+        File rootDir = getRootDir(controller);
+        return new DeclarativeResourcesModelImpl(settingsSchema, projectSchema, rootDir);
     }
 
-    private static Pair<File, List<File>> getDeclarativeBuildFiles(BuildController controller) {
+    private static File getRootDir(BuildController controller) {
         GradleBuild gradleBuild = controller.getModel(GradleBuild.class);
-        File rootProjectDirectory = gradleBuild.getRootProject().getProjectDirectory();
-        List<File> declarativeBuildFiles = gradleBuild
-                .getProjects()
-                .getAll()
-                .stream()
-                .map(p -> new File(p.getProjectDirectory(), "build.gradle.dcl"))
-                .filter(File::exists).collect(Collectors.toList());
-        if (declarativeBuildFiles.isEmpty()) {
-            throw new RuntimeException("No declarative project file found");
-        }
-        return Pair.of(rootProjectDirectory,  declarativeBuildFiles);
+        return gradleBuild.getRootProject().getProjectDirectory();
     }
 
     
@@ -64,18 +47,15 @@ public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeReso
         private final InterpretationSequence settingsSequence;
         private final InterpretationSequence projectSequence;
         private final File rootDir;
-        private final List<File> declarativeBuildFiles;
 
         public DeclarativeResourcesModelImpl(
                 InterpretationSequence settingsSequence,
                 InterpretationSequence projectSequence,
-                File rootDir, 
-                List<File> declarativeBuildFiles
+                File rootDir
         ) {
             this.settingsSequence = settingsSequence;
             this.projectSequence = projectSequence;
             this.rootDir = rootDir;
-            this.declarativeBuildFiles = declarativeBuildFiles;
         }
 
         @Override
@@ -89,35 +69,8 @@ public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeReso
         }
 
         @Override
-        public AnalysisSchema getAnalysisSchema() {
-            return StreamSupport.stream(getProjectInterpretationSequence().getSteps().spliterator(), false)
-                    .findFirst()
-                    .orElseThrow(() -> new RuntimeException("no schema step available for project"))
-                    .getEvaluationSchemaForStep()
-                    .getAnalysisSchema();
-        }
-
-        @Override
         public File getRootDir() {
             return rootDir;
-        }
-
-        @Override
-        public File getSettingsFile() {
-            // TODO: this is an assumption about the location of the settings file – get it from Gradle instead.
-            List<String> candidateFileNames = Arrays.asList("settings.gradle.dcl", "settings.gradle.kts");
-            Function<String, File> asFileInRootDirectory = it -> new File(getRootDir(), it);
-
-            return candidateFileNames.stream()
-                    .map(asFileInRootDirectory)
-                    .filter(File::exists)
-                    .findFirst()
-                    .orElse(asFileInRootDirectory.apply(candidateFileNames.get(0)));
-        }
-
-        @Override
-        public List<File> getDeclarativeBuildFiles() {
-            return declarativeBuildFiles;
         }
     }
 }

@@ -1,6 +1,10 @@
 package org.gradle.declarative.lsp.extension
 
-import org.gradle.declarative.dsl.schema.AnalysisSchema
+import org.gradle.declarative.dsl.schema.*
+import org.gradle.internal.declarativedsl.analysis.DefaultAnalysisSchema
+import org.gradle.internal.declarativedsl.analysis.DefaultDataClass
+import org.gradle.internal.declarativedsl.analysis.DefaultEnumClass
+import org.gradle.internal.declarativedsl.analysis.DefaultFqName
 
 /*
  * Copyright 2024 the original author or authors.
@@ -25,3 +29,83 @@ inline fun <reified T> AnalysisSchema.findType(name: String): T? = dataClassType
     }?.let {
         it as T
     }
+
+
+/**
+ * Produces an [AnalysisSchema] that approximates the [schemas] merged together.
+ * Namely, it has [AnalysisSchema.dataClassTypesByFqName] from all the schemas, and if a type appears in more than
+ * one of the schemas, its contents get merged, too.
+ *
+ * The top level receiver is either the merged type from the [AnalysisSchema.topLevelReceiverType]s from the schemas, if
+ * it has the same name in all of them, or a type with a synthetic name that has the content from the top level
+ * receiver types from [schemas].
+ */
+fun unionAnalysisSchema(schemas: List<AnalysisSchema>): AnalysisSchema = if (schemas.size == 1)
+    schemas.single()
+else {
+    fun mergeDataClasses(newName: String?, dataClasses: List<DataClass>): DataClass {
+        // Can't have properties with the same name but different types anyway:
+        val properties = dataClasses.flatMap { it.properties }.distinctBy { it.name }
+
+        val functions = dataClasses.flatMap { it.memberFunctions }
+            .distinctBy { listOf(it.simpleName) + it.parameters.map { it.name to typeIdentityName(it.type) } }
+
+        val constructors =
+            dataClasses.flatMap { it.constructors }.distinctBy { it.parameters.map { typeIdentityName(it.type) } }
+
+        val supertypes = dataClasses.flatMap { it.supertypes }.toSet()
+
+        return DefaultDataClass(
+            newName?.let { DefaultFqName.parse(it) } ?: dataClasses.first().name,
+            dataClasses.first().javaTypeName,
+            dataClasses.first().javaTypeArgumentTypeNames,
+            supertypes,
+            properties,
+            functions,
+            constructors
+        )
+    }
+
+    val dataClassesByFqName = run {
+        fun mergeEnums(enumTypes: List<EnumClass>): EnumClass =
+            DefaultEnumClass(
+                enumTypes.first().name,
+                enumTypes.first().javaTypeName,
+                enumTypes.flatMap { it.entryNames }.distinct()
+            )
+        
+        schemas.flatMap { it.dataClassTypesByFqName.values }.groupBy { it.name }
+            .mapValues { (_, dataClasses) ->
+                when {
+                    dataClasses.all { it is DataClass } -> mergeDataClasses(null, dataClasses.map { it as DataClass })
+                    dataClasses.all { it is EnumClass } -> mergeEnums(dataClasses.map { it as EnumClass })
+                    else -> error("mixed enum and data classes")
+                }
+            }
+    }
+
+    val newTopLevelReceiver = run {
+        val topLevelReceivers = schemas.map { it.topLevelReceiverType }
+        if (topLevelReceivers.map { it.name.qualifiedName }.distinct().size == 1) {
+            dataClassesByFqName.getValue(topLevelReceivers.first().name) as DataClass
+        } else {
+            mergeDataClasses("\$top-level-receiver\$", topLevelReceivers)
+        }
+    }
+
+    DefaultAnalysisSchema(
+        newTopLevelReceiver,
+        dataClassesByFqName,
+        emptyMap(),
+        emptyMap(),
+        emptySet()
+    )
+}
+
+private fun typeIdentityName(typeRef: DataTypeRef) = when (typeRef) {
+    is DataTypeRef.Name -> typeRef.fqName.qualifiedName
+    is DataTypeRef.Type -> when (val type = typeRef.dataType) {
+        is DataType.ClassDataType -> type.name.qualifiedName
+        else -> type.toString()
+    }
+}

@@ -16,6 +16,8 @@
 
 package org.gradle.declarative.lsp.service
 
+import org.gradle.declarative.dsl.schema.AnalysisSchema
+import org.gradle.declarative.lsp.extension.unionAnalysisSchema
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import java.net.URI
 
@@ -33,12 +35,18 @@ class VersionedDocumentStore {
         return store[uri]
     }
 
-    fun storeInitial(uri: URI, document: String, dom: DocumentOverlayResult) {
-        store(uri, DocumentStoreEntry.Initial(document, dom))
+    fun storeInitial(uri: URI, document: String, dom: DocumentOverlayResult, analysisSchemas: List<AnalysisSchema>) {
+        store(uri, DocumentStoreEntry.Initial(document, dom, analysisSchemas))
     }
 
-    fun storeVersioned(uri: URI, version: Int, document: String, dom: DocumentOverlayResult) {
-        store(uri, DocumentStoreEntry.Versioned(version, document, dom))
+    fun storeVersioned(
+        uri: URI,
+        version: Int,
+        document: String,
+        dom: DocumentOverlayResult,
+        analysisSchemas: List<AnalysisSchema>
+    ) {
+        store(uri, DocumentStoreEntry.Versioned(version, document, dom, analysisSchemas))
     }
 
     /**
@@ -73,6 +81,11 @@ class VersionedDocumentStore {
 
         abstract val document: String
         abstract val dom: DocumentOverlayResult
+        abstract val analysisSchemas: List<AnalysisSchema>
+        
+        val unionSchema by lazy { 
+            unionAnalysisSchema(analysisSchemas)
+        }
 
         // Component 1
         operator fun component1(): String = document
@@ -80,13 +93,15 @@ class VersionedDocumentStore {
 
         class Initial(
             override val document: String,
-            override val dom: DocumentOverlayResult
+            override val dom: DocumentOverlayResult,
+            override val analysisSchemas: List<AnalysisSchema>
         ) : DocumentStoreEntry()
 
         class Versioned(
             val version: Int,
             override val document: String,
             override val dom: DocumentOverlayResult,
+            override val analysisSchemas: List<AnalysisSchema>
         ) : DocumentStoreEntry()
     }
 }

@@ -16,6 +16,7 @@
 
 package org.gradle.declarative.lsp
 
+import com.google.gson.JsonObject
 import org.eclipse.lsp4j.CompletionOptions
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.InitializeResult
@@ -65,6 +66,16 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
             "Initialization parameters must not be null"
         }
 
+        val declarativeFeatures = params.initializationOptions?.let {
+            if (it is JsonObject) it else null
+        }?.let {
+            it.get("declarativeFeatures")?.asJsonObject
+        }?.let {
+            DeclarativeFeatures(
+                mutations = it.get("mutations")?.asBoolean ?: false
+            )
+        } ?: DeclarativeFeatures()
+
         val serverCapabilities = ServerCapabilities()
         // Here we set the capabilities we support
         serverCapabilities.setTextDocumentSync(TextDocumentSyncKind.Full)
@@ -105,8 +116,19 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
             )
 
             // Initialize the LSP services
-            textDocumentService.initialize(client, documentStore, mutationRegistry, declarativeResources)
-            workspaceService.initialize(client, documentStore, mutationRegistry, declarativeResources)
+            textDocumentService.initialize(
+                client,
+                documentStore,
+                mutationRegistry,
+                declarativeFeatures,
+                declarativeResources
+            )
+            workspaceService.initialize(
+                client,
+                documentStore,
+                mutationRegistry,
+                declarativeResources
+            )
         }
 
         initialized = true
@@ -144,5 +166,4 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         private val LOGGER = LoggerFactory.getLogger(DeclarativeLanguageServer::class.java)
         private const val MODEL_FETCH_PROGRESS_TOKEN = "modelFetchProgress"
     }
-
 }

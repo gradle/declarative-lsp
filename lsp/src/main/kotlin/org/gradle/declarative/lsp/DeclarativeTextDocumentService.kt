@@ -16,6 +16,8 @@
 
 package org.gradle.declarative.lsp
 
+import org.eclipse.lsp4j.ClientCapabilities
+import org.eclipse.lsp4j.ClientInfo
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionParams
 import org.eclipse.lsp4j.Command
@@ -70,6 +72,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
     private lateinit var client: LanguageClient
     private lateinit var documentStore: VersionedDocumentStore
     private lateinit var mutationRegistry: MutationRegistry
+    private lateinit var declarativeFeatures: DeclarativeFeatures
     private lateinit var declarativeResources: DeclarativeResourcesModel
     private lateinit var schemaAnalysisEvaluator: SimpleAnalysisEvaluator
 
@@ -77,9 +80,11 @@ class DeclarativeTextDocumentService : TextDocumentService {
         client: LanguageClient,
         documentStore: VersionedDocumentStore,
         mutationRegistry: MutationRegistry,
+        declarativeFeatures: DeclarativeFeatures,
         declarativeResources: DeclarativeResourcesModel
     ) {
         this.client = client
+        this.declarativeFeatures = declarativeFeatures
         this.documentStore = documentStore
         this.mutationRegistry = mutationRegistry
         this.declarativeResources = declarativeResources
@@ -216,6 +221,12 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
     override fun codeAction(params: CodeActionParams?): CompletableFuture<MutableList<Either<Command, CodeAction>>> {
         LOGGER.trace("Code action requested: {}", params)
+
+        // If the clients do not support mutations, we don't need to provide any code actions
+        if (!declarativeFeatures.mutations) {
+            return CompletableFuture.completedFuture(mutableListOf())
+        }
+
         val mutations: List<Either<Command, CodeAction>> = params?.let {
             val uri = URI(it.textDocument.uri)
             mutationRegistry.getApplicableMutations(uri, params.range).map { mutation ->

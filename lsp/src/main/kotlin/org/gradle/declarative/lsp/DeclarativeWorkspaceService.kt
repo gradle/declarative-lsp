@@ -19,6 +19,8 @@ package org.gradle.declarative.lsp
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import org.eclipse.lsp4j.ApplyWorkspaceEditParams
+import org.eclipse.lsp4j.ClientCapabilities
+import org.eclipse.lsp4j.ClientInfo
 import org.eclipse.lsp4j.DidChangeConfigurationParams
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams
 import org.eclipse.lsp4j.ExecuteCommandParams

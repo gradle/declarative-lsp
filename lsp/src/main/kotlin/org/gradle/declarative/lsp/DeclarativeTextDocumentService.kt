@@ -16,8 +16,6 @@
 
 package org.gradle.declarative.lsp
 
-import org.eclipse.lsp4j.ClientCapabilities
-import org.eclipse.lsp4j.ClientInfo
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionParams
 import org.eclipse.lsp4j.Command
@@ -42,7 +40,14 @@ import org.eclipse.lsp4j.SignatureInformation
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.TextDocumentService
-import org.gradle.declarative.dsl.schema.*
+import org.gradle.declarative.dsl.schema.AnalysisSchema
+import org.gradle.declarative.dsl.schema.DataClass
+import org.gradle.declarative.dsl.schema.DataParameter
+import org.gradle.declarative.dsl.schema.DataType
+import org.gradle.declarative.dsl.schema.DataTypeRef
+import org.gradle.declarative.dsl.schema.EnumClass
+import org.gradle.declarative.dsl.schema.FunctionSemantics
+import org.gradle.declarative.dsl.schema.SchemaFunction
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
 import org.gradle.declarative.lsp.extension.toLspRange
@@ -168,12 +173,13 @@ class DeclarativeTextDocumentService : TextDocumentService {
         val completions = params?.let { param ->
             val uri = URI(param.textDocument.uri)
             withDom(uri) { dom, schema, _ ->
-                dom.document.visit(
+                val bestFittingNode = dom.document.visit(
                     BestFittingNodeVisitor(
                         params.position,
                         DeclarativeDocument.DocumentNode.ElementNode::class
                     )
                 ).bestFittingNode
+                bestFittingNode
                     ?.getDataClass(dom.overlayResolutionContainer)
                     .let { it ?: schema.topLevelReceiverType }
                     .let { dataClass ->
@@ -411,7 +417,8 @@ private fun computeCompletionInsertText(
 }
 
 /**
- * Computes a [placeholder](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#placeholders) based on the given data type.
+ * Computes a [placeholder](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#placeholders)
+ * based on the given data type.
  *
  * If there is a specific placeholder for the given data type, it will be used.
  * Otherwise, a simple indexed will be used

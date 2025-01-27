@@ -75,8 +75,7 @@ fun <T : DocumentVisitor> DeclarativeDocument.visit(visitor: T): T {
                     is DeclarativeDocument.ValueNode.ValueFactoryNode -> visitor.visitValueFactoryNode(node)
                     else -> {}
                 }
-            }
-            is DeclarativeDocument.DocumentNode -> {
+            } else -> {
                 visitor.visitDocumentNode(node)
                 when (node) {
                     is DeclarativeDocument.DocumentNode.ElementNode -> visitor.visitDocumentElementNode(node)

@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.storage
+package org.gradle.declarative.lsp.service
 
 import io.mockk.mockk
 import org.gradle.declarative.dsl.schema.AnalysisSchema
-import org.gradle.declarative.lsp.service.VersionedDocumentStore
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull

@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.gradle.declarative.dsl.tooling.models)
 
     testImplementation(libs.mockk)
+    testImplementation(libs.gradle.tooling.api)
 }
 
 detekt {

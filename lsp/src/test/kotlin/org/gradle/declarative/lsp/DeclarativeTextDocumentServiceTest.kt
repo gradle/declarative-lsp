@@ -38,6 +38,7 @@ import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 
+@Suppress("MaxLineLength")
 class DeclarativeTextDocumentServiceTest {
 
     @field:TempDir
@@ -46,10 +47,12 @@ class DeclarativeTextDocumentServiceTest {
     private lateinit var service: DeclarativeTextDocumentService
 
     private lateinit var settingsFile: Path
+    private lateinit var buildFile: Path
 
     @BeforeEach
     fun setup() {
         settingsFile = Path("$buildFolder/settings.gradle.dcl")
+        buildFile = Path("$buildFolder/app/build.gradle.dcl")
 
         val declarativeResources = setupGradleBuild(buildFolder)
 
@@ -61,69 +64,99 @@ class DeclarativeTextDocumentServiceTest {
             DeclarativeFeatures(),
             declarativeResources
         )
+    }
+
+    @Test
+    fun `code completion inside dependencies block`() {
+        val script = settingsFile
+        openFile(script)
+
+        assertEquals(
+            listOf(
+                "            dependencies {",
+                "                implementation(\"org.junit.jupiter:junit-jupiter:5.10.2\")",
+                "                runtimeOnly(\"org.junit.platform:junit-platform-launcher\")",
+                "            }",
+            ),
+            script.readLines().slice(26..29)
+        )
+
+        assertCompletion(
+            script, 27, 15, listOf(
+                """androidImplementation(dependency: ProjectDependency), androidImplementation(${'$'}1)${'$'}0""",
+                """androidImplementation(dependency: String), androidImplementation("${'$'}{1}")${'$'}0""",
+                """compileOnly(dependency: ProjectDependency), compileOnly(${'$'}1)${'$'}0""",
+                """compileOnly(dependency: String), compileOnly("${'$'}{1}")${'$'}0""",
+                """implementation(dependency: ProjectDependency), implementation(${'$'}1)${'$'}0""",
+                """implementation(dependency: String), implementation("${'$'}{1}")${'$'}0""",
+                """project(projectPath: String), project("${'$'}{1}")${'$'}0""",
+                """runtimeOnly(dependency: ProjectDependency), runtimeOnly(${'$'}1)${'$'}0""",
+                """runtimeOnly(dependency: String), runtimeOnly("${'$'}{1}")${'$'}0""",
+            )
+        )
+    }
+
+    @Test
+    fun `code completion inside block with properties`() {
+        val script = buildFile
+        openFile(script)
+
+        assertEquals(
+            listOf(
+                "androidLibrary {",
+                "    secrets {         }",
+                "}",
+            ),
+            script.readLines().slice(3..5)
+        )
+
+        assertCompletion(
+            script, 4, 16, listOf(
+                """defaultPropertiesFile = layout.projectDirectory.file(path: String), defaultPropertiesFile = layout.projectDirectory.file("${'$'}{1}")${'$'}0""",
+                """defaultPropertiesFile = layout.settingsDirectory.file(path: String), defaultPropertiesFile = layout.settingsDirectory.file("${'$'}{1}")${'$'}0""",
+                """enabled = Boolean, enabled = ${'$'}{1|true,false|}"""
+            )
+        )
+    }
+
+    private fun assertCompletion(script: Path, line: Int, column: Int, expectedCompletions: List<String>) {
+        val actualCompletionItems = service.completion(completionParams(script, line, column)).get().left
+        assertEquals(
+            expectedCompletions.sorted(),
+            actualCompletionItems.map { "${it.label}, ${it.insertText}" }.sorted()
+        )
+    }
+
+    private fun openFile(script: Path) {
         service.didOpen(DidOpenTextDocumentParams().apply {
             textDocument = TextDocumentItem().apply {
-                uri = settingsFile.toUri().toString()
-                text = settingsFile.readText()
+                uri = script.toUri().toString()
+                text = script.readText()
             }
         })
     }
 
-    @Test
-    fun `code completion`() {
+    private fun completionParams(script: Path, line: Int, column: Int): CompletionParams {
         val completionParams = CompletionParams().apply {
-            textDocument = TextDocumentIdentifier(settingsFile.toUri().toString())
-            position = Position(32, 16)
+            textDocument = TextDocumentIdentifier(script.toUri().toString())
+            position = Position(line, column)
         }
-
-        assertEquals(
-            listOf(
-                "        compileOptions {",
-                "            sourceCompatibility = VERSION_17",
-                "            targetCompatibility = VERSION_17",
-                "        }"
-            ),
-            settingsFile.readLines().slice(31..34)
-        )
-
-        assertEquals(
-            listOf(
-                "encoding = String",
-                "isCoreLibraryDesugaringEnabled = Boolean",
-                "sourceCompatibility = JavaVersion",
-                "targetCompatibility = JavaVersion"
-            ),
-            service.completion(completionParams).get().left.map { it.label }
-        )
+        return completionParams
     }
-
 
     @Suppress("LongMethod")
     private fun setupGradleBuild(dir: File): DeclarativeResourcesModel {
-        Path("$dir/settings.gradle.dcl").writeText(
+        settingsFile.writeText(
             """
             pluginManagement {
                 repositories {
-                    google()
-                    mavenCentral()
-                    maven {
-                        url = uri("https://androidx.dev/studio/builds/12648882/artifacts/artifacts/repository")
-                    }
+                    google() // Needed for the Android plugin, applied by the unified plugin
+                    gradlePluginPortal()
                 }
             }
             
             plugins {
-                id("com.android.ecosystem").version("8.9.0-dev")
-            }
-            
-            dependencyResolutionManagement {
-                repositories {
-                    google()
-                    mavenCentral()
-                    maven {
-                        url = uri("https://androidx.dev/studio/builds/12648882/artifacts/artifacts/repository")
-                    }
-                }
+                id("org.gradle.experimental.android-ecosystem").version("0.1.37")
             }
             
             rootProject.name = "example-android-app"
@@ -131,43 +164,50 @@ class DeclarativeTextDocumentServiceTest {
             include("app")
             
             defaults {
-                androidApp {
+                androidApplication {
+                    jdkVersion = 17
                     compileSdk = 34
-                    compileOptions {
-                        sourceCompatibility = VERSION_17
-                        targetCompatibility = VERSION_17
-                    }
-                    defaultConfig {
-                        minSdk = 30
-                        versionCode = 1
-                        versionName = "0.1"
-                        applicationId = "org.gradle.experimental.android.app"
-                    }
-                    dependenciesDcl {
-                        implementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
+                    minSdk = 30
+            
+                    versionCode = 1
+                    versionName = "0.1"
+                    applicationId = "org.gradle.experimental.android.app"
+            
+                    testing {
+                        dependencies {
+                            implementation("org.junit.jupiter:junit-jupiter:5.10.2")
+                            runtimeOnly("org.junit.platform:junit-platform-launcher")
+                        }
                     }
                 }
             
                 androidLibrary {
+                    jdkVersion = 17
                     compileSdk = 34
-                    compileOptions {
-                        sourceCompatibility = VERSION_17
-                        targetCompatibility = VERSION_17
-                    }
-                    defaultConfig {
-                        minSdk = 30
-                    }
-                    dependenciesDcl {
-                        implementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
+                    minSdk = 30
+            
+                    testing {
+                        dependencies {
+                            implementation("org.junit.jupiter:junit-jupiter:5.10.2")
+                            runtimeOnly("org.junit.platform:junit-platform-launcher")
+                        }
                     }
                 }
             }
             """.trimIndent()
         )
+        Path("$dir/gradle").createDirectories().resolve("gradle-daemon-jvm.properties").writeText(
+            """
+            toolchainVersion=17
+            """.trimIndent()
+        )
         Path("$dir/app/").createDirectories().resolve("build.gradle.dcl").writeText(
             """
-            androidApp {
+            androidApplication {
                 namespace = "org.example.app"
+            }
+            androidLibrary {
+                secrets {         }
             }
             """.trimIndent()
         )
@@ -184,10 +224,6 @@ class DeclarativeTextDocumentServiceTest {
             class MainActivity : Activity() {
                 override fun onCreate(savedInstanceState: Bundle?) {
                     super.onCreate(savedInstanceState)
-                    setContentView(R.layout.activity_main)
-            
-                    val textView = findViewById(R.id.textView) as TextView
-                    textView.text = "Hello, World!"
                 }
             }
             """.trimIndent()

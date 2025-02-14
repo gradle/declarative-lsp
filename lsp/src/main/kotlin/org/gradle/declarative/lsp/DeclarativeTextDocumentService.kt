@@ -376,7 +376,8 @@ private fun completionItem(property: DataProperty, resolvedType: DataType) =
         insertText = "${property.name} = ${computeTypedPlaceholder(1, resolvedType)}"
     }
 
-private typealias LabelAndInsertText = Pair<String, String>
+
+private data class LabelAndInsertText(val label: String, val insertText: String)
 
 private fun computePropertyByValueFactoryCompletions(
     dataClass: DataClass,
@@ -388,7 +389,7 @@ private fun computePropertyByValueFactoryCompletions(
             .filter { it.semantics is FunctionSemantics.Pure && it.returnValueType is DataTypeRef.Name }
             .forEach {
                 val indexKey = (it.returnValueType as DataTypeRef.Name).fqName
-                val labelAndInsertText = "$namePrefix${computeCompletionLabel(it)}" to "$namePrefix${computeCompletionInsertText(it, analysisSchema)}"
+                val labelAndInsertText = LabelAndInsertText("$namePrefix${computeCompletionLabel(it)}", "$namePrefix${computeCompletionInsertText(it, analysisSchema)}")
                 factoryIndex.merge(indexKey, listOf(labelAndInsertText)) { oldVal, newVal -> oldVal + newVal }
             }
         type.properties.filter { it.valueType is DataTypeRef.Name }.forEach {
@@ -413,10 +414,10 @@ private fun computePropertyByValueFactoryCompletions(
             val factoriesForProperty = factories[resolvedType.name]
             factoriesForProperty
                 ?.map {
-                    CompletionItem("${property.name} = ${it.first}").apply {
+                    CompletionItem("${property.name} = ${it.label}").apply {
                         kind = CompletionItemKind.Field
                         insertTextFormat = InsertTextFormat.Snippet
-                        insertText = "${property.name} = ${it.second}"
+                        insertText = "${property.name} = ${it.insertText}"
                     }
                 } ?: emptyList()
         } else {

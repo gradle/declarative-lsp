@@ -56,6 +56,7 @@ import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
 import org.gradle.declarative.lsp.extension.toLspRange
 import org.gradle.declarative.lsp.service.MutationRegistry
 import org.gradle.declarative.lsp.service.VersionedDocumentStore
+import org.gradle.declarative.lsp.service.VersionedDocumentStore.DocumentStoreEntry
 import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
@@ -79,6 +80,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
     private lateinit var client: LanguageClient
     private lateinit var documentStore: VersionedDocumentStore
+    private lateinit var valueFactoryIndexStore: ValueFactoryIndexStore
     private lateinit var mutationRegistry: MutationRegistry
     private lateinit var declarativeFeatures: DeclarativeFeatures
     private lateinit var declarativeResources: DeclarativeResourcesModel
@@ -94,6 +96,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         this.client = client
         this.declarativeFeatures = declarativeFeatures
         this.documentStore = documentStore
+        this.valueFactoryIndexStore = ValueFactoryIndexStore()
         this.mutationRegistry = mutationRegistry
         this.declarativeResources = declarativeResources
 
@@ -113,6 +116,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
             val parsed = parse(uri, text)
             run {
                 documentStore.storeInitial(uri, text, parsed.documentOverlayResult, parsed.analysisSchemas)
+                    ?.also { storeEntry -> valueFactoryIndexStore.store(uri, storeEntry) }
                 processDocument(uri)
             }
         }
@@ -127,6 +131,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
                 val text = change.text
                 val parsed = parse(uri, change.text)
                 documentStore.storeVersioned(uri, version, text, parsed.documentOverlayResult, parsed.analysisSchemas)
+                    ?.also { storeEntry -> valueFactoryIndexStore.store(uri, storeEntry) }
                 processDocument(uri)
             }
         }
@@ -137,6 +142,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         params?.let {
             val uri = URI(it.textDocument.uri)
             documentStore.remove(uri)
+            valueFactoryIndexStore.remove(uri)
         }
     }
 
@@ -148,7 +154,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         LOGGER.trace("Hover requested for position: {}", params)
         val hover = params?.let {
             val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom, _, _ ->
+            withDom(uri) { dom, _, _, _ ->
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
                 val visitor = BestFittingNodeVisitor(
                     params.position,
@@ -175,7 +181,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         LOGGER.trace("Completion requested for position: {}", params)
         val completions = params?.let { param ->
             val uri = URI(param.textDocument.uri)
-            withDom(uri) { dom, schema, _ ->
+            withDom(uri) { dom, schema, valueFactoryIndex, _ ->
                 val bestFittingNode = dom.document.visit(
                     BestFittingNodeVisitor(
                         params.position,
@@ -188,7 +194,8 @@ class DeclarativeTextDocumentService : TextDocumentService {
                     .let { dataClass ->
                         computePropertyCompletions(dataClass, schema) + computePropertyByValueFactoryCompletions(
                             dataClass,
-                            schema
+                            schema,
+                            valueFactoryIndex
                         ) +
                                 computeFunctionCompletions(dataClass, schema)
                     }
@@ -202,7 +209,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
         val signatureInformationList = params?.let {
             val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom, _, _ ->
+            withDom(uri) { dom, _, _, _ ->
                 val position = it.position
                 val matchingNodes = dom.document.visit(
                     BestFittingNodeVisitor(
@@ -273,7 +280,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
     // Utility and other member functions ------------------------------------------------------------------------------
 
-    private fun processDocument(uri: URI) = withDom(uri) { dom, schema, _ ->
+    private fun processDocument(uri: URI) = withDom(uri) { dom, schema, _, _ ->
         reportSyntaxErrors(uri, dom)
         reportSemanticErrors(uri, dom)
         mutationRegistry.registerDocument(uri, schema, dom.result)
@@ -343,9 +350,9 @@ class DeclarativeTextDocumentService : TextDocumentService {
         )
     }
 
-    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, AnalysisSchema, String) -> T): T? {
+    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, AnalysisSchema, ValueFactoryIndex, String) -> T): T? {
         return documentStore[uri]?.let { entry ->
-            work(entry.dom, entry.unionSchema, entry.document)
+            work(entry.dom, entry.unionSchema, valueFactoryIndexStore[uri]!!, entry.document)
         }
     }
 
@@ -376,42 +383,15 @@ private fun completionItem(property: DataProperty, resolvedType: DataType) =
         insertText = "${property.name} = ${computeTypedPlaceholder(1, resolvedType)}"
     }
 
-
-private data class LabelAndInsertText(val label: String, val insertText: String)
-
 private fun computePropertyByValueFactoryCompletions(
     dataClass: DataClass,
-    analysisSchema: AnalysisSchema
+    analysisSchema: AnalysisSchema,
+    valueFactoryIndex: ValueFactoryIndex,
 ): List<CompletionItem> {
-    fun indexValueFactories(analysisSchema: AnalysisSchema, type: DataClass, namePrefix: String): Map<FqName, List<LabelAndInsertText>> {
-        val factoryIndex = mutableMapOf<FqName, List<LabelAndInsertText>>()
-        type.memberFunctions
-            .filter { it.semantics is FunctionSemantics.Pure && it.returnValueType is DataTypeRef.Name }
-            .forEach {
-                val indexKey = (it.returnValueType as DataTypeRef.Name).fqName
-                val labelAndInsertText = LabelAndInsertText("$namePrefix${computeCompletionLabel(it)}", "$namePrefix${computeCompletionInsertText(it, analysisSchema)}")
-                factoryIndex.merge(indexKey, listOf(labelAndInsertText)) { oldVal, newVal -> oldVal + newVal }
-            }
-        type.properties.filter { it.valueType is DataTypeRef.Name }.forEach {
-            when (val propType = analysisSchema.dataClassTypesByFqName[(it.valueType as DataTypeRef.Name).fqName]) {
-                is DataClass -> {
-                    val propName = it.name
-                    val propIndex = indexValueFactories(analysisSchema, propType, "$namePrefix${propName}.")
-                    propIndex.forEach { (key, value) -> factoryIndex.merge(key, value) { oldVal, newVal -> oldVal + newVal } }
-                }
-
-                is EnumClass -> Unit
-                null -> Unit
-            }
-        }
-        return factoryIndex
-    }
-
-    val factories = indexValueFactories(analysisSchema, analysisSchema.topLevelReceiverType, "")
     return dataClass.properties.flatMap { property ->
         val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(property.valueType)
         if (resolvedType is DataType.ClassDataType) {
-            val factoriesForProperty = factories[resolvedType.name]
+            val factoriesForProperty = valueFactoryIndex.factoriesForProperty(resolvedType.name)
             factoriesForProperty
                 ?.map {
                     CompletionItem("${property.name} = ${it.label}").apply {
@@ -506,6 +486,57 @@ private fun computeCompletionInsertText(
         else -> "${function.simpleName}${parameterSnippet}$0"
     }
 }
+
+private class ValueFactoryIndexStore() {
+
+    private val store = mutableMapOf<URI, ValueFactoryIndex>()
+
+    operator fun get(uri: URI): ValueFactoryIndex? = store[uri]
+
+    fun store(uri: URI, storeEntry: DocumentStoreEntry) {
+        store[uri] = ValueFactoryIndex(storeEntry)
+    }
+
+    fun remove(uri: URI) {
+        store.remove(uri)
+    }
+}
+
+private class ValueFactoryIndex(storeEntry: DocumentStoreEntry) {
+
+    private val index: Map<FqName, List<LabelAndInsertText>> by lazy {
+        val schema = storeEntry.unionSchema
+        indexValueFactories(schema, schema.topLevelReceiverType, "")
+    }
+
+    fun factoriesForProperty(fqName: FqName): List<LabelAndInsertText>? = index[fqName]
+
+    private fun indexValueFactories(analysisSchema: AnalysisSchema, type: DataClass, namePrefix: String): Map<FqName, List<LabelAndInsertText>> {
+        val factoryIndex = mutableMapOf<FqName, List<LabelAndInsertText>>()
+        type.memberFunctions
+            .filter { it.semantics is FunctionSemantics.Pure && it.returnValueType is DataTypeRef.Name }
+            .forEach {
+                val indexKey = (it.returnValueType as DataTypeRef.Name).fqName
+                val labelAndInsertText = LabelAndInsertText("$namePrefix${computeCompletionLabel(it)}", "$namePrefix${computeCompletionInsertText(it, analysisSchema)}")
+                factoryIndex.merge(indexKey, listOf(labelAndInsertText)) { oldVal, newVal -> oldVal + newVal }
+            }
+        type.properties.filter { it.valueType is DataTypeRef.Name }.forEach {
+            when (val propType = analysisSchema.dataClassTypesByFqName[(it.valueType as DataTypeRef.Name).fqName]) {
+                is DataClass -> {
+                    val propName = it.name
+                    val propIndex = indexValueFactories(analysisSchema, propType, "$namePrefix${propName}.")
+                    propIndex.forEach { (key, value) -> factoryIndex.merge(key, value) { oldVal, newVal -> oldVal + newVal } }
+                }
+
+                is EnumClass -> Unit
+                null -> Unit
+            }
+        }
+        return factoryIndex
+    }
+}
+
+private data class LabelAndInsertText(val label: String, val insertText: String)
 
 // Extension functions -------------------------------------------------------------------------------------------------
 

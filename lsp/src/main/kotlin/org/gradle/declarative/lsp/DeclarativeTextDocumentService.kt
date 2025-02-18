@@ -513,6 +513,7 @@ private class ValueFactoryIndex(storeEntry: DocumentStoreEntry) {
 
     private fun indexValueFactories(analysisSchema: AnalysisSchema, type: DataClass, namePrefix: String): Map<FqName, List<LabelAndInsertText>> {
         val factoryIndex = mutableMapOf<FqName, List<LabelAndInsertText>>()
+
         type.memberFunctions
             .filter { it.semantics is FunctionSemantics.Pure && it.returnValueType is DataTypeRef.Name }
             .forEach {
@@ -520,18 +521,19 @@ private class ValueFactoryIndex(storeEntry: DocumentStoreEntry) {
                 val labelAndInsertText = LabelAndInsertText("$namePrefix${computeCompletionLabel(it)}", "$namePrefix${computeCompletionInsertText(it, analysisSchema)}")
                 factoryIndex.merge(indexKey, listOf(labelAndInsertText)) { oldVal, newVal -> oldVal + newVal }
             }
-        type.properties.filter { it.valueType is DataTypeRef.Name }.forEach {
-            when (val propType = analysisSchema.dataClassTypesByFqName[(it.valueType as DataTypeRef.Name).fqName]) {
+
+        val typeRefContext = SchemaTypeRefContext(analysisSchema)
+        type.properties.forEach {
+            when (val propType = typeRefContext.resolveRef(it.valueType)) {
                 is DataClass -> {
                     val propName = it.name
                     val propIndex = indexValueFactories(analysisSchema, propType, "$namePrefix${propName}.")
                     propIndex.forEach { (key, value) -> factoryIndex.merge(key, value) { oldVal, newVal -> oldVal + newVal } }
                 }
-
-                is EnumClass -> Unit
-                null -> Unit
+                else -> Unit
             }
         }
+
         return factoryIndex
     }
 }

@@ -509,6 +509,10 @@ private class ValueFactoryIndex(storeEntry: DocumentStoreEntry) {
         indexValueFactories(schema, schema.topLevelReceiverType, "")
     }
 
+    // TODO: currently this index contains all value factories from the whole schema
+    //  going forward we should make it take into account which value factory is available
+    //  in which block, because only the ones defined at the top level are available everywhere
+
     fun factoriesForProperty(fqName: FqName): List<LabelAndInsertText>? = index[fqName]
 
     private fun indexValueFactories(analysisSchema: AnalysisSchema, type: DataClass, namePrefix: String): Map<FqName, List<LabelAndInsertText>> {

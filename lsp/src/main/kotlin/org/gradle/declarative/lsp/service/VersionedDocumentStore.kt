@@ -35,9 +35,8 @@ class VersionedDocumentStore {
         return store[uri]
     }
 
-    fun storeInitial(uri: URI, document: String, dom: DocumentOverlayResult, analysisSchemas: List<AnalysisSchema>) {
+    fun storeInitial(uri: URI, document: String, dom: DocumentOverlayResult, analysisSchemas: List<AnalysisSchema>): DocumentStoreEntry? =
         store(uri, DocumentStoreEntry.Initial(document, dom, analysisSchemas))
-    }
 
     fun storeVersioned(
         uri: URI,
@@ -45,9 +44,7 @@ class VersionedDocumentStore {
         document: String,
         dom: DocumentOverlayResult,
         analysisSchemas: List<AnalysisSchema>
-    ) {
-        store(uri, DocumentStoreEntry.Versioned(version, document, dom, analysisSchemas))
-    }
+    ): DocumentStoreEntry? = store(uri, DocumentStoreEntry.Versioned(version, document, dom, analysisSchemas))
 
     /**
      * Stores a versioned document.
@@ -55,22 +52,22 @@ class VersionedDocumentStore {
      *
      * @return `true` if the document was stored, `false` otherwise.
      */
-    private fun store(uri: URI, entry: DocumentStoreEntry): Boolean {
+    private fun store(uri: URI, entry: DocumentStoreEntry): DocumentStoreEntry? {
         val storeEntry = store[uri]
         if (storeEntry is DocumentStoreEntry.Versioned && entry is DocumentStoreEntry.Versioned) {
             // If both are versioned, we only store if the new version is greater
             if (entry.version > storeEntry.version) {
                 store[uri] = entry
-                return true
+                return entry
             }
         } else {
             // In any other case (e.g. not stored value, value is re-initialized), we store the new value
             store[uri] = entry
-            return true
+            return entry
         }
 
         // If we reach this point, the document was not stored
-        return false
+        return null
     }
 
     fun remove(uri: URI) {
@@ -82,7 +79,7 @@ class VersionedDocumentStore {
         abstract val document: String
         abstract val dom: DocumentOverlayResult
         abstract val analysisSchemas: List<AnalysisSchema>
-        
+
         val unionSchema by lazy { 
             unionAnalysisSchema(analysisSchemas)
         }

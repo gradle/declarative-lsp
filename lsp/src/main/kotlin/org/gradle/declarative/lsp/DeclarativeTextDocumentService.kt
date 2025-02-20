@@ -16,8 +16,6 @@
 
 package org.gradle.declarative.lsp
 
-import org.eclipse.lsp4j.ClientCapabilities
-import org.eclipse.lsp4j.ClientInfo
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionParams
 import org.eclipse.lsp4j.Command
@@ -42,12 +40,23 @@ import org.eclipse.lsp4j.SignatureInformation
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.TextDocumentService
-import org.gradle.declarative.dsl.schema.*
+import org.gradle.declarative.dsl.schema.AnalysisSchema
+import org.gradle.declarative.dsl.schema.DataClass
+import org.gradle.declarative.dsl.schema.DataParameter
+import org.gradle.declarative.dsl.schema.DataProperty
+import org.gradle.declarative.dsl.schema.DataType
+import org.gradle.declarative.dsl.schema.DataTypeRef
+import org.gradle.declarative.dsl.schema.EnumClass
+import org.gradle.declarative.dsl.schema.FqName
+import org.gradle.declarative.dsl.schema.FunctionSemantics
+import org.gradle.declarative.dsl.schema.SchemaFunction
+import org.gradle.declarative.dsl.schema.SchemaMemberFunction
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
 import org.gradle.declarative.lsp.extension.toLspRange
 import org.gradle.declarative.lsp.service.MutationRegistry
 import org.gradle.declarative.lsp.service.VersionedDocumentStore
+import org.gradle.declarative.lsp.service.VersionedDocumentStore.DocumentStoreEntry
 import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
@@ -71,6 +80,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
     private lateinit var client: LanguageClient
     private lateinit var documentStore: VersionedDocumentStore
+    private lateinit var valueFactoryIndexStore: ValueFactoryIndexStore
     private lateinit var mutationRegistry: MutationRegistry
     private lateinit var declarativeFeatures: DeclarativeFeatures
     private lateinit var declarativeResources: DeclarativeResourcesModel
@@ -86,9 +96,10 @@ class DeclarativeTextDocumentService : TextDocumentService {
         this.client = client
         this.declarativeFeatures = declarativeFeatures
         this.documentStore = documentStore
+        this.valueFactoryIndexStore = ValueFactoryIndexStore()
         this.mutationRegistry = mutationRegistry
         this.declarativeResources = declarativeResources
-        
+
         this.schemaAnalysisEvaluator = SimpleAnalysisEvaluator.withSchema(
             declarativeResources.settingsInterpretationSequence,
             declarativeResources.projectInterpretationSequence
@@ -105,6 +116,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
             val parsed = parse(uri, text)
             run {
                 documentStore.storeInitial(uri, text, parsed.documentOverlayResult, parsed.analysisSchemas)
+                    ?.also { storeEntry -> valueFactoryIndexStore.store(uri, storeEntry) }
                 processDocument(uri)
             }
         }
@@ -119,6 +131,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
                 val text = change.text
                 val parsed = parse(uri, change.text)
                 documentStore.storeVersioned(uri, version, text, parsed.documentOverlayResult, parsed.analysisSchemas)
+                    ?.also { storeEntry -> valueFactoryIndexStore.store(uri, storeEntry) }
                 processDocument(uri)
             }
         }
@@ -129,6 +142,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         params?.let {
             val uri = URI(it.textDocument.uri)
             documentStore.remove(uri)
+            valueFactoryIndexStore.remove(uri)
         }
     }
 
@@ -140,7 +154,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         LOGGER.trace("Hover requested for position: {}", params)
         val hover = params?.let {
             val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom, _, _ ->
+            withDom(uri) { dom, _, _, _ ->
                 // LSPs are supplying 0-based line and column numbers, while the DSL model is 1-based
                 val visitor = BestFittingNodeVisitor(
                     params.position,
@@ -167,18 +181,23 @@ class DeclarativeTextDocumentService : TextDocumentService {
         LOGGER.trace("Completion requested for position: {}", params)
         val completions = params?.let { param ->
             val uri = URI(param.textDocument.uri)
-            withDom(uri) { dom, schema, _ ->
-                dom.document.visit(
+            withDom(uri) { dom, schema, valueFactoryIndex, _ ->
+                val bestFittingNode = dom.document.visit(
                     BestFittingNodeVisitor(
                         params.position,
                         DeclarativeDocument.DocumentNode.ElementNode::class
                     )
                 ).bestFittingNode
+                bestFittingNode
                     ?.getDataClass(dom.overlayResolutionContainer)
                     .let { it ?: schema.topLevelReceiverType }
                     .let { dataClass ->
-                        computePropertyCompletions(dataClass, schema) +
-                            computeFunctionCompletions(dataClass, schema)
+                        computePropertyCompletions(dataClass, schema) + computePropertyByValueFactoryCompletions(
+                            dataClass,
+                            schema,
+                            valueFactoryIndex
+                        ) +
+                                computeFunctionCompletions(dataClass, schema)
                     }
             }
         }.orEmpty().toMutableList()
@@ -190,7 +209,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
         val signatureInformationList = params?.let {
             val uri = URI(it.textDocument.uri)
-            withDom(uri) { dom, _, _ ->
+            withDom(uri) { dom, _, _, _ ->
                 val position = it.position
                 val matchingNodes = dom.document.visit(
                     BestFittingNodeVisitor(
@@ -261,7 +280,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
     // Utility and other member functions ------------------------------------------------------------------------------
 
-    private fun processDocument(uri: URI) = withDom(uri) { dom, schema, _ ->
+    private fun processDocument(uri: URI) = withDom(uri) { dom, schema, _, _ ->
         reportSyntaxErrors(uri, dom)
         reportSemanticErrors(uri, dom)
         mutationRegistry.registerDocument(uri, schema, dom.result)
@@ -303,7 +322,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
             )
         )
     }
-    
+
     data class ParsedDocument(
         val documentOverlayResult: DocumentOverlayResult,
         val analysisSchemas: List<AnalysisSchema>
@@ -312,7 +331,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
     private fun parse(uri: URI, text: String): ParsedDocument {
         val fileName = uri.path.substringAfterLast('/')
         val analysisResult = schemaAnalysisEvaluator.evaluate(fileName, text)
-        
+
         // Workaround: for now, the mutation utilities cannot handle mutations that touch the underlay document content.
         // To avoid that, use the utility that produces an overlay result with no real underlay content.
         // This utility also takes care of multi-step resolution results and merges them, presenting .
@@ -331,9 +350,9 @@ class DeclarativeTextDocumentService : TextDocumentService {
         )
     }
 
-    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, AnalysisSchema, String) -> T): T? {
+    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, AnalysisSchema, ValueFactoryIndex, String) -> T): T? {
         return documentStore[uri]?.let { entry ->
-            work(entry.dom, entry.unionSchema, entry.document)
+            work(entry.dom, entry.unionSchema, valueFactoryIndexStore[uri]!!, entry.document)
         }
     }
 
@@ -345,14 +364,44 @@ private fun computePropertyCompletions(
     dataClass: DataClass,
     analysisSchema: AnalysisSchema
 ): List<CompletionItem> {
-    return dataClass.properties.map { property ->
-        val propertyName = property.name
-        val targetType = property.valueType.toSimpleName()
+    return dataClass.properties.mapNotNull { property ->
+        when (val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(property.valueType)) {
+            is EnumClass -> completionItem(property, resolvedType)
+            is DataType.BooleanDataType -> completionItem(property, resolvedType)
+            is DataType.IntDataType -> completionItem(property, resolvedType)
+            is DataType.LongDataType -> completionItem(property, resolvedType)
+            is DataType.StringDataType -> completionItem(property, resolvedType)
+            else -> null
+        }
+    }
+}
 
-        CompletionItem("$propertyName = $targetType").apply {
-            kind = CompletionItemKind.Field
-            insertTextFormat = InsertTextFormat.Snippet
-            insertText = "${property.name} = ${computeTypedPlaceholder(1, property.valueType, analysisSchema)}"
+private fun completionItem(property: DataProperty, resolvedType: DataType) =
+    CompletionItem("${property.name} = ${property.valueType.toSimpleName()}").apply {
+        kind = CompletionItemKind.Field
+        insertTextFormat = InsertTextFormat.Snippet
+        insertText = "${property.name} = ${computeTypedPlaceholder(1, resolvedType)}"
+    }
+
+private fun computePropertyByValueFactoryCompletions(
+    dataClass: DataClass,
+    analysisSchema: AnalysisSchema,
+    valueFactoryIndex: ValueFactoryIndex,
+): List<CompletionItem> {
+    return dataClass.properties.flatMap { property ->
+        val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(property.valueType)
+        if (resolvedType is DataType.ClassDataType) {
+            val factoriesForProperty = valueFactoryIndex.factoriesForProperty(resolvedType.name)
+            factoriesForProperty
+                ?.map {
+                    CompletionItem("${property.name} = ${it.label}").apply {
+                        kind = CompletionItemKind.Field
+                        insertTextFormat = InsertTextFormat.Snippet
+                        insertText = "${property.name} = ${it.insertText}"
+                    }
+                } ?: emptyList()
+        } else {
+            emptyList()
         }
     }
 }
@@ -362,28 +411,56 @@ private fun computeFunctionCompletions(
     analysisSchema: AnalysisSchema
 ): List<CompletionItem> =
     dataClass.memberFunctions.map { function ->
-        val functionName = function.simpleName
-        val parameterSignature = when (function.parameters.isEmpty()) {
-            true -> ""
-            false -> function.parameters.joinToString(",", "(", ")") { it.toSignatureLabel() }
-        }
-        val configureBlockLabel = function.semantics.toBlockConfigurabilityLabel().orEmpty()
-
-        CompletionItem("$functionName$parameterSignature$configureBlockLabel").apply {
+        val label = computeCompletionLabel(function)
+        val text = computeCompletionInsertText(function, analysisSchema)
+        CompletionItem(label).apply {
             kind = CompletionItemKind.Method
             insertTextFormat = InsertTextFormat.Snippet
             insertTextMode = InsertTextMode.AdjustIndentation
-            insertText = computeCompletionInsertText(function, analysisSchema)
+            insertText = text
         }
     }
 
+/**
+ * Computes a [placeholder](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#placeholders)
+ * based on the given data type.
+ *
+ * If there is a specific placeholder for the given data type, it will be used.
+ * Otherwise, a simple indexed will be used
+ */
+private fun computeTypedPlaceholder(
+    index: Int,
+    resolvedType: DataType
+): String {
+    return when (resolvedType) {
+        is DataType.BooleanDataType -> "\${$index|true,false|}"
+        is EnumClass -> "\${$index|${resolvedType.entryNames.joinToString(",")}|}"
+        is DataType.IntDataType -> "\${$index:0}"
+        is DataType.LongDataType -> "\${$index:0L}"
+        is DataType.StringDataType -> "\"\${$index}\""
+        else -> "\$$index"
+    }
+}
+
+private fun computeCompletionLabel(function: SchemaMemberFunction): String {
+    val functionName = function.simpleName
+    val parameterSignature = when (function.parameters.isEmpty()) {
+        true -> ""
+        false -> function.parameters.joinToString(",", "(", ")") { it.toSignatureLabel() }
+    }
+    val configureBlockLabel = function.semantics.toBlockConfigurabilityLabel().orEmpty()
+
+    return "$functionName$parameterSignature$configureBlockLabel"
+}
+
 private fun computeCompletionInsertText(
     function: SchemaFunction,
-    analysisSchema: AnalysisSchema
+    analysisSchema: AnalysisSchema,
 ): String {
     val parameterSnippet = function.parameters.mapIndexed { index, parameter ->
         // Additional placeholders are indexed from 1
-        computeTypedPlaceholder(index + 1, parameter.type, analysisSchema)
+        val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(parameter.type)
+        computeTypedPlaceholder(index + 1, resolvedType)
     }.joinToString(", ", "(", ")")
 
     return when (val semantics = function.semantics) {
@@ -410,26 +487,62 @@ private fun computeCompletionInsertText(
     }
 }
 
-/**
- * Computes a [placeholder](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#placeholders) based on the given data type.
- *
- * If there is a specific placeholder for the given data type, it will be used.
- * Otherwise, a simple indexed will be used
- */
-private fun computeTypedPlaceholder(
-    index: Int,
-    type: DataTypeRef,
-    analysisSchema: AnalysisSchema
-): String {
-    return when (val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(type)) {
-        is DataType.BooleanDataType -> "\${$index|true,false|}"
-        is EnumClass -> "\${$index|${resolvedType.entryNames.joinToString(",")}|}"
-        is DataType.IntDataType -> "\${$index:0}"
-        is DataType.LongDataType -> "\${$index:0L}"
-        is DataType.StringDataType -> "\"\${$index}\""
-        else -> "\$$index"
+private class ValueFactoryIndexStore() {
+
+    private val store = mutableMapOf<URI, ValueFactoryIndex>()
+
+    operator fun get(uri: URI): ValueFactoryIndex? = store[uri]
+
+    fun store(uri: URI, storeEntry: DocumentStoreEntry) {
+        store[uri] = ValueFactoryIndex(storeEntry)
+    }
+
+    fun remove(uri: URI) {
+        store.remove(uri)
     }
 }
+
+private class ValueFactoryIndex(storeEntry: DocumentStoreEntry) {
+
+    private val index: Map<FqName, List<LabelAndInsertText>> by lazy {
+        val schema = storeEntry.unionSchema
+        indexValueFactories(schema, schema.topLevelReceiverType, "")
+    }
+
+    // TODO: currently this index contains all value factories from the whole schema
+    //  going forward we should make it take into account which value factory is available
+    //  in which block, because only the ones defined at the top level are available everywhere
+
+    fun factoriesForProperty(fqName: FqName): List<LabelAndInsertText>? = index[fqName]
+
+    private fun indexValueFactories(analysisSchema: AnalysisSchema, type: DataClass, namePrefix: String): Map<FqName, List<LabelAndInsertText>> {
+        val factoryIndex = mutableMapOf<FqName, List<LabelAndInsertText>>()
+
+        type.memberFunctions
+            .filter { it.semantics is FunctionSemantics.Pure && it.returnValueType is DataTypeRef.Name }
+            .forEach {
+                val indexKey = (it.returnValueType as DataTypeRef.Name).fqName
+                val labelAndInsertText = LabelAndInsertText("$namePrefix${computeCompletionLabel(it)}", "$namePrefix${computeCompletionInsertText(it, analysisSchema)}")
+                factoryIndex.merge(indexKey, listOf(labelAndInsertText)) { oldVal, newVal -> oldVal + newVal }
+            }
+
+        val typeRefContext = SchemaTypeRefContext(analysisSchema)
+        type.properties.forEach {
+            when (val propType = typeRefContext.resolveRef(it.valueType)) {
+                is DataClass -> {
+                    val propName = it.name
+                    val propIndex = indexValueFactories(analysisSchema, propType, "$namePrefix${propName}.")
+                    propIndex.forEach { (key, value) -> factoryIndex.merge(key, value) { oldVal, newVal -> oldVal + newVal } }
+                }
+                else -> Unit
+            }
+        }
+
+        return factoryIndex
+    }
+}
+
+private data class LabelAndInsertText(val label: String, val insertText: String)
 
 // Extension functions -------------------------------------------------------------------------------------------------
 

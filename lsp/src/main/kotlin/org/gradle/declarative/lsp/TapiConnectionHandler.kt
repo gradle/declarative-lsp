@@ -29,7 +29,7 @@ private val LOGGER = LoggerFactory.getLogger(TapiConnectionHandler::class.java)
 
 class TapiConnectionHandler(val projectRoot: File): ProgressListener {
 
-    fun getDomPrequisites(): DeclarativeResourcesModel {
+    fun getDeclarativeResources(): DeclarativeResourcesModel {
         var connection: ProjectConnection? = null
         try {
             connection = GradleConnector

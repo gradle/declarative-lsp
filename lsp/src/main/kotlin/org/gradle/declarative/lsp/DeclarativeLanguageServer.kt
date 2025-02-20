@@ -103,7 +103,7 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
 
         LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
         TapiConnectionHandler(workspaceFolderFile).let {
-            val declarativeResources = it.getDomPrequisites()
+            val declarativeResources = it.getDeclarativeResources()
 
             // Create services shared between the LSP services
             val documentStore = VersionedDocumentStore()

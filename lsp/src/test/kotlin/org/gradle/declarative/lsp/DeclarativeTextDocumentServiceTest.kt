@@ -83,14 +83,16 @@ class DeclarativeTextDocumentServiceTest {
 
         assertCompletion(
             script, 27, 15, listOf(
-                """androidImplementation(dependency: ProjectDependency), androidImplementation(${'$'}1)${'$'}0""",
+                """androidImplementation(dependency: Dependency), androidImplementation(${'$'}1)${'$'}0""",
                 """androidImplementation(dependency: String), androidImplementation("${'$'}{1}")${'$'}0""",
-                """compileOnly(dependency: ProjectDependency), compileOnly(${'$'}1)${'$'}0""",
+                """compileOnly(dependency: Dependency), compileOnly(${'$'}1)${'$'}0""",
                 """compileOnly(dependency: String), compileOnly("${'$'}{1}")${'$'}0""",
-                """implementation(dependency: ProjectDependency), implementation(${'$'}1)${'$'}0""",
+                """implementation(dependency: Dependency), implementation(${'$'}1)${'$'}0""",
                 """implementation(dependency: String), implementation("${'$'}{1}")${'$'}0""",
+                """platform(dependency: Dependency), platform(${'$'}1)${'$'}0""",
+                """platform(dependency: String), platform("${'$'}{1}")${'$'}0""",
                 """project(projectPath: String), project("${'$'}{1}")${'$'}0""",
-                """runtimeOnly(dependency: ProjectDependency), runtimeOnly(${'$'}1)${'$'}0""",
+                """runtimeOnly(dependency: Dependency), runtimeOnly(${'$'}1)${'$'}0""",
                 """runtimeOnly(dependency: String), runtimeOnly("${'$'}{1}")${'$'}0""",
             )
         )
@@ -146,6 +148,7 @@ class DeclarativeTextDocumentServiceTest {
 
     @Suppress("LongMethod")
     private fun setupGradleBuild(dir: File): DeclarativeResourcesModel {
+        val androidEcosystemPluginVersion = "0.1.40"
         settingsFile.writeText(
             """
             pluginManagement {
@@ -156,7 +159,7 @@ class DeclarativeTextDocumentServiceTest {
             }
             
             plugins {
-                id("org.gradle.experimental.android-ecosystem").version("0.1.37")
+                id("org.gradle.experimental.android-ecosystem").version("$androidEcosystemPluginVersion")
             }
             
             rootProject.name = "example-android-app"
@@ -190,6 +193,21 @@ class DeclarativeTextDocumentServiceTest {
                         dependencies {
                             implementation("org.junit.jupiter:junit-jupiter:5.10.2")
                             runtimeOnly("org.junit.platform:junit-platform-launcher")
+                        }
+                    }
+                    
+                    buildTypes {
+                        release {
+                            dependencies {
+                                implementation("com.squareup.okhttp3:okhttp:4.2.2")
+                            }
+                
+                            defaultProguardFiles = listOf(proguardFile("proguard-android-optimize.txt"))
+                            proguardFiles = listOf(proguardFile("proguard-rules.pro"), proguardFile("some_other_file.txt"))
+                
+                            minify {
+                                enabled = true
+                            }
                         }
                     }
                 }

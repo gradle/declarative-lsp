@@ -48,7 +48,7 @@ else {
         val properties = dataClasses.flatMap { it.properties }.distinctBy { it.name }
 
         val functions = dataClasses.flatMap { it.memberFunctions }
-            .distinctBy { listOf(it.simpleName) + it.parameters.map { it.name to typeIdentityName(it.type) } }
+            .distinctBy { listOf(it.simpleName) + it.parameters.map { param -> param.name to typeIdentityName(param.type) } }
 
         val constructors =
             dataClasses.flatMap { it.constructors }.distinctBy { it.parameters.map { typeIdentityName(it.type) } }
@@ -98,6 +98,8 @@ else {
         dataClassesByFqName,
         emptyMap(),
         emptyMap(),
+        emptyMap(),
+        emptyMap(),
         emptySet()
     )
 }
@@ -108,4 +110,5 @@ private fun typeIdentityName(typeRef: DataTypeRef) = when (typeRef) {
         is DataType.ClassDataType -> type.name.qualifiedName
         else -> type.toString()
     }
+    is DataTypeRef.NameWithArgs -> TODO()
 }

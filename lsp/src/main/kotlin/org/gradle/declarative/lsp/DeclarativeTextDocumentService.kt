@@ -47,10 +47,8 @@ import org.gradle.declarative.dsl.schema.DataProperty
 import org.gradle.declarative.dsl.schema.DataType
 import org.gradle.declarative.dsl.schema.DataTypeRef
 import org.gradle.declarative.dsl.schema.EnumClass
-import org.gradle.declarative.dsl.schema.FqName
 import org.gradle.declarative.dsl.schema.FunctionSemantics
 import org.gradle.declarative.dsl.schema.SchemaFunction
-import org.gradle.declarative.dsl.schema.SchemaMemberFunction
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
 import org.gradle.declarative.lsp.extension.toLspRange
@@ -350,7 +348,10 @@ class DeclarativeTextDocumentService : TextDocumentService {
         )
     }
 
-    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, AnalysisSchema, ValueFactoryIndex, String) -> T): T? {
+    private fun <T> withDom(
+        uri: URI,
+        work: (DocumentOverlayResult, AnalysisSchema, ValueFactoryIndex, String) -> T
+    ): T? {
         return documentStore[uri]?.let { entry ->
             work(entry.dom, entry.unionSchema, valueFactoryIndexStore[uri]!!, entry.document)
         }
@@ -385,19 +386,22 @@ private fun completionItem(property: DataProperty, resolvedType: DataType) =
 
 private fun computePropertyByValueFactoryCompletions(
     dataClass: DataClass,
-    analysisSchema: AnalysisSchema,
+    schema: AnalysisSchema,
     valueFactoryIndex: ValueFactoryIndex,
 ): List<CompletionItem> {
     return dataClass.properties.flatMap { property ->
-        val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(property.valueType)
+        val resolvedType = SchemaTypeRefContext(schema).resolveRef(property.valueType)
         if (resolvedType is DataType.ClassDataType) {
             val factoriesForProperty = valueFactoryIndex.factoriesForProperty(resolvedType.name)
             factoriesForProperty
+                ?.filter { true } // TODO: will need to match the properties type against the function return type parameters
                 ?.map {
-                    CompletionItem("${property.name} = ${it.label}").apply {
+                    val completionLabel = "${it.namePrefix}${computeCompletionLabel(it.function)}" // TODO: will not be fixed for functions with parametrized return type
+                    val insertionText = "${it.namePrefix}${computeCompletionInsertText(it.function, schema)}"
+                    CompletionItem("${property.name} = $completionLabel").apply {
                         kind = CompletionItemKind.Field
                         insertTextFormat = InsertTextFormat.Snippet
-                        insertText = "${property.name} = ${it.insertText}"
+                        insertText = "${property.name} = $insertionText"
                     }
                 } ?: emptyList()
         } else {
@@ -442,7 +446,7 @@ private fun computeTypedPlaceholder(
     }
 }
 
-private fun computeCompletionLabel(function: SchemaMemberFunction): String {
+private fun computeCompletionLabel(function: SchemaFunction): String {
     val functionName = function.simpleName
     val parameterSignature = when (function.parameters.isEmpty()) {
         true -> ""
@@ -487,7 +491,7 @@ private fun computeCompletionInsertText(
     }
 }
 
-private class ValueFactoryIndexStore() {
+private class ValueFactoryIndexStore {
 
     private val store = mutableMapOf<URI, ValueFactoryIndex>()
 
@@ -501,48 +505,6 @@ private class ValueFactoryIndexStore() {
         store.remove(uri)
     }
 }
-
-private class ValueFactoryIndex(storeEntry: DocumentStoreEntry) {
-
-    private val index: Map<FqName, List<LabelAndInsertText>> by lazy {
-        val schema = storeEntry.unionSchema
-        indexValueFactories(schema, schema.topLevelReceiverType, "")
-    }
-
-    // TODO: currently this index contains all value factories from the whole schema
-    //  going forward we should make it take into account which value factory is available
-    //  in which block, because only the ones defined at the top level are available everywhere
-
-    fun factoriesForProperty(fqName: FqName): List<LabelAndInsertText>? = index[fqName]
-
-    private fun indexValueFactories(analysisSchema: AnalysisSchema, type: DataClass, namePrefix: String): Map<FqName, List<LabelAndInsertText>> {
-        val factoryIndex = mutableMapOf<FqName, List<LabelAndInsertText>>()
-
-        type.memberFunctions
-            .filter { it.semantics is FunctionSemantics.Pure && it.returnValueType is DataTypeRef.Name }
-            .forEach {
-                val indexKey = (it.returnValueType as DataTypeRef.Name).fqName
-                val labelAndInsertText = LabelAndInsertText("$namePrefix${computeCompletionLabel(it)}", "$namePrefix${computeCompletionInsertText(it, analysisSchema)}")
-                factoryIndex.merge(indexKey, listOf(labelAndInsertText)) { oldVal, newVal -> oldVal + newVal }
-            }
-
-        val typeRefContext = SchemaTypeRefContext(analysisSchema)
-        type.properties.forEach {
-            when (val propType = typeRefContext.resolveRef(it.valueType)) {
-                is DataClass -> {
-                    val propName = it.name
-                    val propIndex = indexValueFactories(analysisSchema, propType, "$namePrefix${propName}.")
-                    propIndex.forEach { (key, value) -> factoryIndex.merge(key, value) { oldVal, newVal -> oldVal + newVal } }
-                }
-                else -> Unit
-            }
-        }
-
-        return factoryIndex
-    }
-}
-
-private data class LabelAndInsertText(val label: String, val insertText: String)
 
 // Extension functions -------------------------------------------------------------------------------------------------
 

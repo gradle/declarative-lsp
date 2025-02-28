@@ -66,11 +66,11 @@ abstract class AbstractDeclarativeTextDocumentServiceTest {
 
     protected abstract fun script(): Path
 
-    protected fun assertCompletion(script: Path, line: Int, column: Int, expectedCompletions: List<String>) {
+    protected fun assertCompletion(script: Path, line: Int, column: Int, expectedCompletions: String) {
         val actualCompletionItems = service.completion(completionParams(script, line, column)).get().left
         assertEquals(
-            expectedCompletions.sorted(),
-            actualCompletionItems.map { "${it.label}, ${it.insertText}" }.sorted()
+            expectedCompletions,
+            actualCompletionItems.map { "${it.label} --> ${it.insertText}" }.sorted().joinToString(separator = "\n")
         )
     }
 
@@ -173,6 +173,10 @@ abstract class AbstractDeclarativeTextDocumentServiceTest {
             }
             androidLibrary {
                 secrets {         }
+
+                buildTypes {
+                    release {         }
+                }
             }
             """.trimIndent()
         )

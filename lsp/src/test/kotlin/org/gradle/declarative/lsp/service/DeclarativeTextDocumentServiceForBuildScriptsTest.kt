@@ -54,15 +54,14 @@ class DeclarativeTextDocumentServiceForBuildScriptsTest : AbstractDeclarativeTex
         assertCompletion(
             script(), 7, 21, """
                 |baselineProfile { this: BaselineProfile } --> baselineProfile {${'\n'}|${'\t'}${'$'}0${'\n'}|}
-                |defaultProguardFiles = listOf(elements: Array<DefaultTypeVariableUsage(variableId=0)>) --> defaultProguardFiles = listOf(${'$'}1)${'$'}0
+                |defaultProguardFiles = listOf(elements: vararg Array<ProguardFile>) --> defaultProguardFiles = listOf(${'$'}1)${'$'}0
                 |dependencies { this: AndroidLibraryDependencies } --> dependencies {${'\n'}|${'\t'}${'$'}0${'\n'}|}
                 |minify { this: Minify } --> minify {${'\n'}|${'\t'}${'$'}0${'\n'}|}
                 |proguardFile(arg0: String) --> proguardFile("${'$'}{1}")${'$'}0
-                |proguardFiles = listOf(elements: Array<DefaultTypeVariableUsage(variableId=0)>) --> proguardFiles = listOf(${'$'}1)${'$'}0
+                |proguardFiles = listOf(elements: vararg Array<ProguardFile>) --> proguardFiles = listOf(${'$'}1)${'$'}0
             """.trimMargin()
         )
-        // TODO: wtf is the singular proguardFile?
-        // TODO: lists are not yet ok
+        // TODO: why is the name for the parameter in the "proguardFile(String)" function not "name" as in the source?
     }
 
 }

@@ -39,24 +39,24 @@ class DeclarativeTextDocumentServiceForSettingsScriptsTest: AbstractDeclarativeT
         )
 
         assertCompletion(
-            script(), 27, 15, listOf(
-                """androidImplementation(dependency: Dependency), androidImplementation(${'$'}1)${'$'}0""",
-                """androidImplementation(dependency: String), androidImplementation("${'$'}{1}")${'$'}0""",
-                """compileOnly(dependency: Dependency), compileOnly(${'$'}1)${'$'}0""",
-                """compileOnly(dependency: String), compileOnly("${'$'}{1}")${'$'}0""",
-                """implementation(dependency: Dependency), implementation(${'$'}1)${'$'}0""",
-                """implementation(dependency: String), implementation("${'$'}{1}")${'$'}0""",
-                """platform(dependency: Dependency), platform(${'$'}1)${'$'}0""",
-                """platform(dependency: String), platform("${'$'}{1}")${'$'}0""",
-                """project(projectPath: String), project("${'$'}{1}")${'$'}0""",
-                """runtimeOnly(dependency: Dependency), runtimeOnly(${'$'}1)${'$'}0""",
-                """runtimeOnly(dependency: String), runtimeOnly("${'$'}{1}")${'$'}0""",
-            )
+            script(), 27, 15, """
+                |androidImplementation(dependency: Dependency) --> androidImplementation(${'$'}1)${'$'}0
+                |androidImplementation(dependency: String) --> androidImplementation("${'$'}{1}")${'$'}0
+                |compileOnly(dependency: Dependency) --> compileOnly(${'$'}1)${'$'}0
+                |compileOnly(dependency: String) --> compileOnly("${'$'}{1}")${'$'}0
+                |implementation(dependency: Dependency) --> implementation(${'$'}1)${'$'}0
+                |implementation(dependency: String) --> implementation("${'$'}{1}")${'$'}0
+                |platform(dependency: Dependency) --> platform(${'$'}1)${'$'}0
+                |platform(dependency: String) --> platform("${'$'}{1}")${'$'}0
+                |project(projectPath: String) --> project("${'$'}{1}")${'$'}0
+                |runtimeOnly(dependency: Dependency) --> runtimeOnly(${'$'}1)${'$'}0
+                |runtimeOnly(dependency: String) --> runtimeOnly("${'$'}{1}")${'$'}0
+            """.trimMargin()
         )
     }
 
     @Test
-    fun `code completion inside block with properties`() {
+    fun `code completion inside block with file properties`() {
         openFile(script())
 
         assertEquals(
@@ -65,12 +65,14 @@ class DeclarativeTextDocumentServiceForSettingsScriptsTest: AbstractDeclarativeT
         )
 
         assertCompletion(
-            script(), 45, 21, listOf(
-                """defaultPropertiesFile = layout.projectDirectory.file(path: String), defaultPropertiesFile = layout.projectDirectory.file("${'$'}{1}")${'$'}0""",
-                """defaultPropertiesFile = layout.settingsDirectory.file(path: String), defaultPropertiesFile = layout.settingsDirectory.file("${'$'}{1}")${'$'}0""",
-                """enabled = Boolean, enabled = ${'$'}{1|true,false|}"""
-            )
+            script(), 45, 21, """
+                |defaultPropertiesFile = layout.projectDirectory.file(path: String) --> defaultPropertiesFile = layout.projectDirectory.file("${'$'}{1}")${'$'}0
+                |defaultPropertiesFile = layout.settingsDirectory.file(path: String) --> defaultPropertiesFile = layout.settingsDirectory.file("${'$'}{1}")${'$'}0
+                |enabled = Boolean --> enabled = ${'$'}{1${'|'}true,false${'|'}}
+            """.trimMargin()
         )
     }
+
+    // TODO: test for list properties
 
 }

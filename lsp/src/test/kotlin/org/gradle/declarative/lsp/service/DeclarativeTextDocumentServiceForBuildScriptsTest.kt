@@ -20,30 +20,49 @@ import org.junit.jupiter.api.Test
 import kotlin.io.path.readLines
 import kotlin.test.assertEquals
 
-class DeclarativeTextDocumentServiceForBuildScriptsTest: AbstractDeclarativeTextDocumentServiceTest() {
+class DeclarativeTextDocumentServiceForBuildScriptsTest : AbstractDeclarativeTextDocumentServiceTest() {
 
     override fun script() = buildFile
 
     @Test
-    fun `code completion inside block with properties`() {
+    fun `code completion inside block with file properties`() {
         openFile(script())
 
         assertEquals(
-            listOf(
-                "androidLibrary {",
-                "    secrets {         }",
-                "}",
-            ),
-            script().readLines().slice(3..5)
+            "    secrets {         }",
+            script().readLines()[4]
         )
 
         assertCompletion(
-            script(), 4, 16, listOf(
-                """defaultPropertiesFile = layout.projectDirectory.file(path: String), defaultPropertiesFile = layout.projectDirectory.file("${'$'}{1}")${'$'}0""",
-                """defaultPropertiesFile = layout.settingsDirectory.file(path: String), defaultPropertiesFile = layout.settingsDirectory.file("${'$'}{1}")${'$'}0""",
-                """enabled = Boolean, enabled = ${'$'}{1|true,false|}"""
-            )
+            script(), 4, 16, """
+                |defaultPropertiesFile = layout.projectDirectory.file(path: String) --> defaultPropertiesFile = layout.projectDirectory.file("${'$'}{1}")${'$'}0
+                |defaultPropertiesFile = layout.settingsDirectory.file(path: String) --> defaultPropertiesFile = layout.settingsDirectory.file("${'$'}{1}")${'$'}0
+                |enabled = Boolean --> enabled = ${'$'}{1|true,false|}
+            """.trimMargin()
         )
+    }
+
+    @Test
+    fun `code completion inside block with list properties`() {
+        openFile(script())
+
+        assertEquals(
+            "        release {         }",
+            script().readLines()[7]
+        )
+
+        assertCompletion(
+            script(), 7, 21, """
+                |baselineProfile { this: BaselineProfile } --> baselineProfile {${'\n'}|${'\t'}${'$'}0${'\n'}|}
+                |defaultProguardFiles = listOf(elements: Array<DefaultTypeVariableUsage(variableId=0)>) --> defaultProguardFiles = listOf(${'$'}1)${'$'}0
+                |dependencies { this: AndroidLibraryDependencies } --> dependencies {${'\n'}|${'\t'}${'$'}0${'\n'}|}
+                |minify { this: Minify } --> minify {${'\n'}|${'\t'}${'$'}0${'\n'}|}
+                |proguardFile(arg0: String) --> proguardFile("${'$'}{1}")${'$'}0
+                |proguardFiles = listOf(elements: Array<DefaultTypeVariableUsage(variableId=0)>) --> proguardFiles = listOf(${'$'}1)${'$'}0
+            """.trimMargin()
+        )
+        // TODO: wtf is the singular proguardFile?
+        // TODO: lists are not yet ok
     }
 
 }

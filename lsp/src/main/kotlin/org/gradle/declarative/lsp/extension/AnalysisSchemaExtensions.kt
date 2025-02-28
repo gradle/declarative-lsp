@@ -93,12 +93,20 @@ else {
         }
     }
 
+    val newExternalFunctionsByFqName = run {
+        val mergedResult = mutableMapOf<FqName, DataTopLevelFunction>()
+        schemas.forEach {
+            mergedResult.putAll(it.externalFunctionsByFqName)
+        }
+        mergedResult
+    }
+
     DefaultAnalysisSchema(
         newTopLevelReceiver,
         dataClassesByFqName,
         emptyMap(),
         emptyMap(),
-        emptyMap(),
+        newExternalFunctionsByFqName,
         emptyMap(),
         emptySet()
     )

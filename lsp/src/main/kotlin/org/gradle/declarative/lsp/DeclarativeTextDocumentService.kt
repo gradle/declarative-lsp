@@ -47,10 +47,9 @@ import org.gradle.declarative.dsl.schema.DataProperty
 import org.gradle.declarative.dsl.schema.DataType
 import org.gradle.declarative.dsl.schema.DataTypeRef
 import org.gradle.declarative.dsl.schema.EnumClass
-import org.gradle.declarative.dsl.schema.FqName
 import org.gradle.declarative.dsl.schema.FunctionSemantics
 import org.gradle.declarative.dsl.schema.SchemaFunction
-import org.gradle.declarative.dsl.schema.SchemaMemberFunction
+import org.gradle.declarative.dsl.schema.VarargParameter
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
 import org.gradle.declarative.lsp.extension.toLspRange
@@ -62,6 +61,7 @@ import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.visit
 import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
+import org.gradle.internal.declarativedsl.analysis.TypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.mutation.MutationParameterKind
@@ -350,7 +350,10 @@ class DeclarativeTextDocumentService : TextDocumentService {
         )
     }
 
-    private fun <T> withDom(uri: URI, work: (DocumentOverlayResult, AnalysisSchema, ValueFactoryIndex, String) -> T): T? {
+    private fun <T> withDom(
+        uri: URI,
+        work: (DocumentOverlayResult, AnalysisSchema, ValueFactoryIndex, String) -> T
+    ): T? {
         return documentStore[uri]?.let { entry ->
             work(entry.dom, entry.unionSchema, valueFactoryIndexStore[uri]!!, entry.document)
         }
@@ -385,25 +388,81 @@ private fun completionItem(property: DataProperty, resolvedType: DataType) =
 
 private fun computePropertyByValueFactoryCompletions(
     dataClass: DataClass,
-    analysisSchema: AnalysisSchema,
+    schema: AnalysisSchema,
     valueFactoryIndex: ValueFactoryIndex,
 ): List<CompletionItem> {
     return dataClass.properties.flatMap { property ->
-        val resolvedType = SchemaTypeRefContext(analysisSchema).resolveRef(property.valueType)
+        val typeRefContext = SchemaTypeRefContext(schema)
+        val resolvedType = typeRefContext.resolveRef(property.valueType)
         if (resolvedType is DataType.ClassDataType) {
             val factoriesForProperty = valueFactoryIndex.factoriesForProperty(resolvedType.name)
             factoriesForProperty
+                ?.filter { true } // TODO: need to filter out cases where type parameters don't match the properties type
                 ?.map {
-                    CompletionItem("${property.name} = ${it.label}").apply {
+                    val genericTypeSubstitution = typeRefContext.computeGenericTypeSubstitution(property.valueType, it.function.returnValueType) ?: emptyMap()
+                    val completionLabel = "${it.namePrefix}${computeCompletionLabel(it.function, genericTypeSubstitution)}"
+                    val insertionText = "${it.namePrefix}${computeCompletionInsertText(it.function, schema)}"
+                    CompletionItem("${property.name} = $completionLabel").apply {
                         kind = CompletionItemKind.Field
                         insertTextFormat = InsertTextFormat.Snippet
-                        insertText = "${property.name} = ${it.insertText}"
+                        insertText = "${property.name} = $insertionText"
                     }
                 } ?: emptyList()
         } else {
             emptyList()
         }
     }
+}
+
+internal fun TypeRefContext.computeGenericTypeSubstitution(
+    expectedType: DataTypeRef?,
+    actualType: DataTypeRef
+): Map<DataType.TypeVariableUsage, DataType>? {
+    // TODO: copied from org.gradle.internal.declarativedsl.analysis.utils.kt, because it's not public there
+
+    val expected = resolveRef(expectedType ?: return emptyMap())
+    val actual = resolveRef(actualType)
+
+    var hasConflict = false
+    val result = buildMap {
+        fun recordEquivalence(typeVariableUsage: DataType.TypeVariableUsage, otherType: DataType) {
+            val mapping = getOrPut(typeVariableUsage) { otherType }
+            if (mapping != otherType) {
+                hasConflict = true
+            }
+        }
+
+        fun visitTypePair(left: DataType, right: DataType) {
+            when {
+                left is DataType.TypeVariableUsage -> recordEquivalence(left, right)
+                right is DataType.TypeVariableUsage -> recordEquivalence(right, left)
+
+                left is DataType.ParameterizedTypeInstance || right is DataType.ParameterizedTypeInstance -> {
+                    if (left is DataType.ParameterizedTypeInstance && right is DataType.ParameterizedTypeInstance && left.typeArguments.size == right.typeArguments.size) {
+                        left.typeArguments.zip(right.typeArguments).forEach { (leftArg, rightArg) ->
+                            when (leftArg) {
+                                is DataType.ParameterizedTypeInstance.TypeArgument.ConcreteTypeArgument -> {
+                                    if (rightArg is DataType.ParameterizedTypeInstance.TypeArgument.ConcreteTypeArgument) {
+                                        visitTypePair(resolveRef(leftArg.type), resolveRef(rightArg.type))
+                                    } else {
+                                        hasConflict = true
+                                    }
+                                }
+
+                                is DataType.ParameterizedTypeInstance.TypeArgument.StarProjection -> Unit
+                            }
+                        }
+                    } else {
+                        hasConflict = true
+                    }
+                }
+            }
+        }
+
+        visitTypePair(expected, actual)
+    }
+
+    return result.takeIf { !hasConflict }
 }
 
 private fun computeFunctionCompletions(
@@ -442,11 +501,11 @@ private fun computeTypedPlaceholder(
     }
 }
 
-private fun computeCompletionLabel(function: SchemaMemberFunction): String {
+private fun computeCompletionLabel(function: SchemaFunction, genericTypeSubstitution: Map<DataType.TypeVariableUsage, DataType> = emptyMap()): String {
     val functionName = function.simpleName
     val parameterSignature = when (function.parameters.isEmpty()) {
         true -> ""
-        false -> function.parameters.joinToString(",", "(", ")") { it.toSignatureLabel() }
+        false -> function.parameters.joinToString(",", "(", ")") { it.toSignatureLabel(genericTypeSubstitution) }
     }
     val configureBlockLabel = function.semantics.toBlockConfigurabilityLabel().orEmpty()
 
@@ -487,7 +546,7 @@ private fun computeCompletionInsertText(
     }
 }
 
-private class ValueFactoryIndexStore() {
+private class ValueFactoryIndexStore {
 
     private val store = mutableMapOf<URI, ValueFactoryIndex>()
 
@@ -502,54 +561,35 @@ private class ValueFactoryIndexStore() {
     }
 }
 
-private class ValueFactoryIndex(storeEntry: DocumentStoreEntry) {
-
-    private val index: Map<FqName, List<LabelAndInsertText>> by lazy {
-        val schema = storeEntry.unionSchema
-        indexValueFactories(schema, schema.topLevelReceiverType, "")
-    }
-
-    // TODO: currently this index contains all value factories from the whole schema
-    //  going forward we should make it take into account which value factory is available
-    //  in which block, because only the ones defined at the top level are available everywhere
-
-    fun factoriesForProperty(fqName: FqName): List<LabelAndInsertText>? = index[fqName]
-
-    private fun indexValueFactories(analysisSchema: AnalysisSchema, type: DataClass, namePrefix: String): Map<FqName, List<LabelAndInsertText>> {
-        val factoryIndex = mutableMapOf<FqName, List<LabelAndInsertText>>()
-
-        type.memberFunctions
-            .filter { it.semantics is FunctionSemantics.Pure && it.returnValueType is DataTypeRef.Name }
-            .forEach {
-                val indexKey = (it.returnValueType as DataTypeRef.Name).fqName
-                val labelAndInsertText = LabelAndInsertText("$namePrefix${computeCompletionLabel(it)}", "$namePrefix${computeCompletionInsertText(it, analysisSchema)}")
-                factoryIndex.merge(indexKey, listOf(labelAndInsertText)) { oldVal, newVal -> oldVal + newVal }
-            }
-
-        val typeRefContext = SchemaTypeRefContext(analysisSchema)
-        type.properties.forEach {
-            when (val propType = typeRefContext.resolveRef(it.valueType)) {
-                is DataClass -> {
-                    val propName = it.name
-                    val propIndex = indexValueFactories(analysisSchema, propType, "$namePrefix${propName}.")
-                    propIndex.forEach { (key, value) -> factoryIndex.merge(key, value) { oldVal, newVal -> oldVal + newVal } }
-                }
-                else -> Unit
-            }
-        }
-
-        return factoryIndex
-    }
-}
-
-private data class LabelAndInsertText(val label: String, val insertText: String)
-
 // Extension functions -------------------------------------------------------------------------------------------------
 
-// TODO: this might not be the best way to resolve the type name, but it works for now
-private fun DataTypeRef.toSimpleName(): String = this.toString()
+private fun DataTypeRef.toSimpleName(genericTypeSubstitution: Map<DataType.TypeVariableUsage, DataType> = emptyMap()): String =
+    when (this) {
+        is DataTypeRef.Name -> fqName.simpleName
+        is DataTypeRef.NameWithArgs -> "${fqName.simpleName}<${typeArguments.joinToString { it.toSimpleName(genericTypeSubstitution) }}>"
+        is DataTypeRef.Type -> dataType.toString()
+    }
 
-private fun DataParameter.toSignatureLabel() = "${this.name}: ${this.type.toSimpleName()}"
+private fun DataType.ParameterizedTypeInstance.TypeArgument.toSimpleName(
+    genericTypeSubstitution: Map<DataType.TypeVariableUsage, DataType> = emptyMap()
+) =
+    when (this) {
+        is DataType.ParameterizedTypeInstance.TypeArgument.ConcreteTypeArgument ->
+            if (type is DataTypeRef.Type && (type as DataTypeRef.Type).dataType is DataType.TypeVariableUsage) {
+                genericTypeSubstitution[(type as DataTypeRef.Type).dataType].toString()
+            } else {
+                this.toString()
+            }
+        is DataType.ParameterizedTypeInstance.TypeArgument.StarProjection -> this.toString()
+    }
+
+private fun DataParameter.toSignatureLabel(
+    genericTypeSubstitution: Map<DataType.TypeVariableUsage, DataType> = emptyMap()
+): String = "${this.name}: " +
+        when (this) {
+            is VarargParameter -> "vararg ${type.toSimpleName(genericTypeSubstitution)}"
+            else -> type.toSimpleName(genericTypeSubstitution)
+        }
 
 private fun FunctionSemantics.toBlockConfigurabilityLabel(): String? = when (this) {
     is FunctionSemantics.ConfigureSemantics -> when (this.configureBlockRequirement) {

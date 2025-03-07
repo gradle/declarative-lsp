@@ -501,7 +501,10 @@ private fun computeTypedPlaceholder(
     }
 }
 
-private fun computeCompletionLabel(function: SchemaFunction, genericTypeSubstitution: Map<DataType.TypeVariableUsage, DataType> = emptyMap()): String {
+private fun computeCompletionLabel(
+    function: SchemaFunction,
+    genericTypeSubstitution: Map<DataType.TypeVariableUsage, DataType> = emptyMap()
+): String {
     val functionName = function.simpleName
     val parameterSignature = when (function.parameters.isEmpty()) {
         true -> ""
@@ -580,16 +583,23 @@ private fun DataType.ParameterizedTypeInstance.TypeArgument.toSimpleName(
             } else {
                 this.toString()
             }
+
         is DataType.ParameterizedTypeInstance.TypeArgument.StarProjection -> this.toString()
     }
 
 private fun DataParameter.toSignatureLabel(
     genericTypeSubstitution: Map<DataType.TypeVariableUsage, DataType> = emptyMap()
-): String = "${this.name}: " +
-        when (this) {
-            is VarargParameter -> "vararg ${type.toSimpleName(genericTypeSubstitution)}"
-            else -> type.toSimpleName(genericTypeSubstitution)
-        }
+): String =
+    when (this) {
+        is VarargParameter -> "vararg ${this.name}: ${getVarargTypeArgument().toSimpleName(genericTypeSubstitution)}"
+        else -> "${this.name}: ${type.toSimpleName(genericTypeSubstitution)}"
+    }
+
+private fun VarargParameter.getVarargTypeArgument(): DataType.ParameterizedTypeInstance.TypeArgument {
+    require(type is DataTypeRef.NameWithArgs)
+    require((type as DataTypeRef.NameWithArgs).typeArguments.size == 1)
+    return (type as DataTypeRef.NameWithArgs).typeArguments[0]
+}
 
 private fun FunctionSemantics.toBlockConfigurabilityLabel(): String? = when (this) {
     is FunctionSemantics.ConfigureSemantics -> when (this.configureBlockRequirement) {

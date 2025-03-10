@@ -93,7 +93,7 @@ abstract class AbstractDeclarativeTextDocumentServiceTest {
 
     @Suppress("LongMethod")
     private fun setupGradleBuild(dir: File): DeclarativeResourcesModel {
-        val androidEcosystemPluginVersion = "0.1.40"
+        val androidEcosystemPluginVersion = "0.1.41"
         settingsFile.writeText(
             """
             pluginManagement {
@@ -156,6 +156,7 @@ abstract class AbstractDeclarativeTextDocumentServiceTest {
                                 enabled = true
                             }
                         }
+                        debug {         }
                     }
                 }
             }

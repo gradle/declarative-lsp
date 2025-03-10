@@ -1,6 +1,12 @@
 package org.gradle.declarative.lsp.extension
 
-import org.gradle.declarative.dsl.schema.*
+import org.gradle.declarative.dsl.schema.AnalysisSchema
+import org.gradle.declarative.dsl.schema.DataClass
+import org.gradle.declarative.dsl.schema.DataTopLevelFunction
+import org.gradle.declarative.dsl.schema.DataType
+import org.gradle.declarative.dsl.schema.DataTypeRef
+import org.gradle.declarative.dsl.schema.EnumClass
+import org.gradle.declarative.dsl.schema.FqName
 import org.gradle.internal.declarativedsl.analysis.DefaultAnalysisSchema
 import org.gradle.internal.declarativedsl.analysis.DefaultDataClass
 import org.gradle.internal.declarativedsl.analysis.DefaultEnumClass
@@ -73,7 +79,7 @@ else {
                 enumTypes.first().javaTypeName,
                 enumTypes.flatMap { it.entryNames }.distinct()
             )
-        
+
         schemas.flatMap { it.dataClassTypesByFqName.values }.groupBy { it.name }
             .mapValues { (_, dataClasses) ->
                 when {
@@ -95,8 +101,20 @@ else {
 
     val newExternalFunctionsByFqName = run {
         val mergedResult = mutableMapOf<FqName, DataTopLevelFunction>()
-        schemas.forEach {
-            mergedResult.putAll(it.externalFunctionsByFqName)
+        schemas.forEach { schema ->
+            mergedResult.putAll(schema.externalFunctionsByFqName)
+        }
+        mergedResult
+    }
+
+    val genericInstantiationsByFqName = run {
+        val mergedResult = mutableMapOf<FqName, Map<List<DataType.ParameterizedTypeInstance.TypeArgument>, DataType.ClassDataType>>()
+        schemas.forEach { schema ->
+            schema.genericInstantiationsByFqName.forEach { instantiation ->
+                mergedResult.merge(instantiation.key, instantiation.value) { oldVal, newVal ->
+                    oldVal + newVal // TODO: is this correct?
+                }
+            }
         }
         mergedResult
     }
@@ -105,7 +123,7 @@ else {
         newTopLevelReceiver,
         dataClassesByFqName,
         emptyMap(),
-        emptyMap(),
+        genericInstantiationsByFqName,
         newExternalFunctionsByFqName,
         emptyMap(),
         emptySet()

@@ -61,7 +61,6 @@ import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.visit
 import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
-import org.gradle.internal.declarativedsl.analysis.TypeRefContext
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
 import org.gradle.internal.declarativedsl.dom.mutation.MutationParameterKind
@@ -192,12 +191,9 @@ class DeclarativeTextDocumentService : TextDocumentService {
                     ?.getDataClass(dom.overlayResolutionContainer)
                     .let { it ?: schema.topLevelReceiverType }
                     .let { dataClass ->
-                        computePropertyCompletions(dataClass, schema) + computePropertyByValueFactoryCompletions(
-                            dataClass,
-                            schema,
-                            valueFactoryIndex
-                        ) +
-                                computeFunctionCompletions(dataClass, schema)
+                        computePropertyCompletions(dataClass, schema) +
+                        computePropertyByValueFactoryCompletions(dataClass, schema, valueFactoryIndex) +
+                        computeFunctionCompletions(dataClass, schema)
                     }
             }
         }.orEmpty().toMutableList()
@@ -393,76 +389,27 @@ private fun computePropertyByValueFactoryCompletions(
 ): List<CompletionItem> {
     return dataClass.properties.flatMap { property ->
         val typeRefContext = SchemaTypeRefContext(schema)
-        val resolvedType = typeRefContext.resolveRef(property.valueType)
-        if (resolvedType is DataType.ClassDataType) {
-            val factoriesForProperty = valueFactoryIndex.factoriesForProperty(resolvedType.name)
+        val propertiesType = typeRefContext.resolveRef(property.valueType)
+        if (propertiesType is DataType.ClassDataType) {
+            val factoriesForProperty = valueFactoryIndex.factoriesForProperty(propertiesType.name)
             factoriesForProperty
-                ?.filter { true } // TODO: need to filter out cases where type parameters don't match the properties type
-                ?.map {
-                    val genericTypeSubstitution = typeRefContext.computeGenericTypeSubstitution(property.valueType, it.function.returnValueType) ?: emptyMap()
-                    val completionLabel = "${it.namePrefix}${computeCompletionLabel(it.function, genericTypeSubstitution)}"
-                    val insertionText = "${it.namePrefix}${computeCompletionInsertText(it.function, schema)}"
-                    CompletionItem("${property.name} = $completionLabel").apply {
-                        kind = CompletionItemKind.Field
-                        insertTextFormat = InsertTextFormat.Snippet
-                        insertText = "${property.name} = $insertionText"
+                ?.mapNotNull { indexEntry ->
+                    val functionReturnType = typeRefContext.resolveRef(indexEntry.function.returnValueType)
+                    val genericTypeSubstitution = typeRefContext.computeGenericTypeSubstitutionIfAssignable(propertiesType, functionReturnType)
+                    genericTypeSubstitution?.let {
+                        val completionLabel = "${indexEntry.namePrefix}${computeCompletionLabel(indexEntry.function, it)}"
+                        val insertionText = "${indexEntry.namePrefix}${computeCompletionInsertText(indexEntry.function, schema)}"
+                        CompletionItem("${property.name} = $completionLabel").apply {
+                            kind = CompletionItemKind.Field
+                            insertTextFormat = InsertTextFormat.Snippet
+                            insertText = "${property.name} = $insertionText"
+                        }
                     }
                 } ?: emptyList()
         } else {
             emptyList()
         }
     }
-}
-
-internal fun TypeRefContext.computeGenericTypeSubstitution(
-    expectedType: DataTypeRef?,
-    actualType: DataTypeRef
-): Map<DataType.TypeVariableUsage, DataType>? {
-    // TODO: copied from org.gradle.internal.declarativedsl.analysis.utils.kt, because it's not public there
-
-    val expected = resolveRef(expectedType ?: return emptyMap())
-    val actual = resolveRef(actualType)
-
-    var hasConflict = false
-    val result = buildMap {
-        fun recordEquivalence(typeVariableUsage: DataType.TypeVariableUsage, otherType: DataType) {
-            val mapping = getOrPut(typeVariableUsage) { otherType }
-            if (mapping != otherType) {
-                hasConflict = true
-            }
-        }
-
-        fun visitTypePair(left: DataType, right: DataType) {
-            when {
-                left is DataType.TypeVariableUsage -> recordEquivalence(left, right)
-                right is DataType.TypeVariableUsage -> recordEquivalence(right, left)
-
-                left is DataType.ParameterizedTypeInstance || right is DataType.ParameterizedTypeInstance -> {
-                    if (left is DataType.ParameterizedTypeInstance && right is DataType.ParameterizedTypeInstance && left.typeArguments.size == right.typeArguments.size) {
-                        left.typeArguments.zip(right.typeArguments).forEach { (leftArg, rightArg) ->
-                            when (leftArg) {
-                                is DataType.ParameterizedTypeInstance.TypeArgument.ConcreteTypeArgument -> {
-                                    if (rightArg is DataType.ParameterizedTypeInstance.TypeArgument.ConcreteTypeArgument) {
-                                        visitTypePair(resolveRef(leftArg.type), resolveRef(rightArg.type))
-                                    } else {
-                                        hasConflict = true
-                                    }
-                                }
-
-                                is DataType.ParameterizedTypeInstance.TypeArgument.StarProjection -> Unit
-                            }
-                        }
-                    } else {
-                        hasConflict = true
-                    }
-                }
-            }
-        }
-
-        visitTypePair(expected, actual)
-    }
-
-    return result.takeIf { !hasConflict }
 }
 
 private fun computeFunctionCompletions(

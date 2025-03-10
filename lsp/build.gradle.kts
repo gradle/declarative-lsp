@@ -31,12 +31,14 @@ dependencies {
     implementation(libs.lsp4j)
     implementation(libs.logback.classic)
     implementation(libs.gradle.tooling.api)
+    implementation(libs.gradle.declarative.dsl.api)
     implementation(libs.gradle.declarative.dsl.core)
     implementation(libs.gradle.declarative.dsl.evaluator)
     implementation(libs.gradle.declarative.dsl.tooling.models)
 
     testImplementation(libs.mockk)
     testImplementation(libs.gradle.tooling.api)
+    testImplementation(libs.kotlin.reflect)
 }
 
 detekt {

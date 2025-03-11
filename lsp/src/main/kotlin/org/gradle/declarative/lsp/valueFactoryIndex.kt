@@ -23,13 +23,12 @@ import org.gradle.declarative.dsl.schema.FqName
 import org.gradle.declarative.dsl.schema.FunctionSemantics
 import org.gradle.declarative.dsl.schema.SchemaFunction
 import org.gradle.declarative.lsp.service.VersionedDocumentStore
-import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
+import org.gradle.internal.declarativedsl.analysis.TypeRefContext
 
 class ValueFactoryIndex(storeEntry: VersionedDocumentStore.DocumentStoreEntry) {
 
     private val index: Map<FqName, List<ValueFactoryIndexEntry>> by lazy {
-        val schema = storeEntry.unionSchema
-        indexValueFactories(schema)
+        indexValueFactories(storeEntry.unionSchema, storeEntry.typeRefContext)
     }
 
     // TODO: currently this index contains all value factories from the whole schema
@@ -38,10 +37,10 @@ class ValueFactoryIndex(storeEntry: VersionedDocumentStore.DocumentStoreEntry) {
 
     fun factoriesForProperty(fqName: FqName): List<ValueFactoryIndexEntry>? = index[fqName]
 
-    private fun indexValueFactories(schema: AnalysisSchema): Map<FqName, List<ValueFactoryIndexEntry>> {
+    private fun indexValueFactories(schema: AnalysisSchema, typeRefContext: TypeRefContext): Map<FqName, List<ValueFactoryIndexEntry>> {
         val factoryIndex = mutableMapOf<FqName, List<ValueFactoryIndexEntry>>()
         factoryIndex.merge(indexValueFactoriesFromExternalFunctions(schema))
-        factoryIndex.merge(indexValueFactoriesFromTopLevelReceiver(schema))
+        factoryIndex.merge(indexValueFactoriesFromTopLevelReceiver(schema, typeRefContext))
         return factoryIndex
     }
 
@@ -58,11 +57,11 @@ class ValueFactoryIndex(storeEntry: VersionedDocumentStore.DocumentStoreEntry) {
         return factoryIndex
     }
 
-    private fun indexValueFactoriesFromTopLevelReceiver(schema: AnalysisSchema) =
-        indexValueFactories(schema, schema.topLevelReceiverType, "")
+    private fun indexValueFactoriesFromTopLevelReceiver(schema: AnalysisSchema, typeRefContext: TypeRefContext) =
+        indexValueFactories(typeRefContext, schema.topLevelReceiverType, "")
 
     private fun indexValueFactories(
-        schema: AnalysisSchema,
+        typeRefContext: TypeRefContext,
         type: DataClass,
         namePrefix: String
     ): Map<FqName, List<ValueFactoryIndexEntry>> {
@@ -76,12 +75,11 @@ class ValueFactoryIndex(storeEntry: VersionedDocumentStore.DocumentStoreEntry) {
                 factoryIndex.merge(indexKey, listOf(valueFactoryIndexEntry)) { oldVal, newVal -> oldVal + newVal }
             }
 
-        val typeRefContext = SchemaTypeRefContext(schema)
         type.properties.forEach {
             when (val propType = typeRefContext.resolveRef(it.valueType)) {
                 is DataClass -> {
                     val propName = it.name
-                    val propIndex = indexValueFactories(schema, propType, "$namePrefix${propName}.")
+                    val propIndex = indexValueFactories(typeRefContext, propType, "$namePrefix${propName}.")
                     factoryIndex.merge(propIndex)
                 }
 

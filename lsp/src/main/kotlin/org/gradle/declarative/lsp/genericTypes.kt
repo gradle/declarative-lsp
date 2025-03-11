@@ -16,12 +16,90 @@
 
 package org.gradle.declarative.lsp
 
+import org.gradle.declarative.dsl.schema.DataClass
+import org.gradle.declarative.dsl.schema.DataParameter
 import org.gradle.declarative.dsl.schema.DataType
+import org.gradle.declarative.dsl.schema.DataTypeRef
+import org.gradle.declarative.dsl.schema.EnumClass
+import org.gradle.declarative.dsl.schema.SchemaFunction
+import org.gradle.declarative.dsl.schema.VarargParameter
+import org.gradle.internal.declarativedsl.analysis.TypeArgumentInternal
 import org.gradle.internal.declarativedsl.analysis.TypeRefContext
+import org.gradle.internal.declarativedsl.analysis.ref
+import org.gradle.internal.declarativedsl.language.DataTypeInternal
 
-// TODO: where should this utility code live
+internal fun DataTypeRef.toSimpleName(genericTypeSubstitution: (DataType) -> DataType = ::identity): String =
+    when (this) {
+        is DataTypeRef.Name -> fqName.simpleName
+        is DataTypeRef.NameWithArgs -> "${fqName.simpleName}<${typeArguments.joinToString { it.toSimpleName(genericTypeSubstitution) }}>"
+        is DataTypeRef.Type -> dataType.toString()
+    }
 
-internal fun TypeRefContext.computeGenericTypeSubstitutionIfAssignable(
+internal fun DataType.ParameterizedTypeInstance.TypeArgument.toSimpleName(genericTypeSubstitution: (DataType) -> DataType) =
+    when (this) {
+        is DataType.ParameterizedTypeInstance.TypeArgument.ConcreteTypeArgument ->
+            if (type is DataTypeRef.Type && (type as DataTypeRef.Type).dataType is DataType.TypeVariableUsage) {
+                val inputType = (type as DataTypeRef.Type).dataType
+                val outputType = genericTypeSubstitution(inputType)
+                outputType.toString()
+            } else {
+                this.toString()
+            }
+
+        is DataType.ParameterizedTypeInstance.TypeArgument.StarProjection -> this.toString()
+    }
+
+
+internal fun SchemaFunction.toSignatureLabel(typeRefContext: TypeRefContext): String {
+    val parameterSignatures = this.parameters.joinToString(", ") { parameter ->
+        parameter.toSignatureLabel(typeRefContext)
+    }
+
+    return "${this.simpleName}(${parameterSignatures})"
+}
+
+internal fun DataParameter.toSignatureLabel(typeRefContext: TypeRefContext, genericTypeSubstitution: Map<DataType.TypeVariableUsage, DataType> = emptyMap()): String {
+    val genericType = typeRefContext.resolveRef(this.type)
+    val concreteType = typeRefContext.applyTypeSubstitution(genericType, genericTypeSubstitution)
+    return when (this) {
+        is VarargParameter -> "vararg ${this.name}: ${concreteType.getVarargTypeArgument()}"
+        else -> "${this.name}: $concreteType"
+    }
+}
+
+private fun DataType.getVarargTypeArgument(): DataTypeRef {
+    require(this is DataType.ParameterizedTypeInstance)
+    require(this.typeArguments.size == 1)
+    require(this.typeArguments[0] is DataType.ParameterizedTypeInstance.TypeArgument.ConcreteTypeArgument)
+    return (this.typeArguments[0] as DataType.ParameterizedTypeInstance.TypeArgument.ConcreteTypeArgument).type
+}
+
+
+internal fun TypeRefContext.applyTypeSubstitution(
+    type: DataType,
+    substitution: Map<DataType.TypeVariableUsage, DataType>
+): DataType {
+    // TODO: copied from Gradle codebase, where it's internal
+
+    fun substituteInTypeArgument(typeArgument: DataType.ParameterizedTypeInstance.TypeArgument) = when (typeArgument) {
+        is DataType.ParameterizedTypeInstance.TypeArgument.ConcreteTypeArgument -> TypeArgumentInternal.DefaultConcreteTypeArgument(applyTypeSubstitution(resolveRef(typeArgument.type), substitution).ref)
+        is DataType.ParameterizedTypeInstance.TypeArgument.StarProjection -> typeArgument
+    }
+
+    return when (type) {
+        is DataType.ParameterizedTypeInstance -> DataTypeInternal.DefaultParameterizedTypeInstance(type.typeSignature, type.typeArguments.map(::substituteInTypeArgument))
+        is DataType.TypeVariableUsage -> substitution[type] ?: type
+
+        is DataClass,
+        is EnumClass,
+        is DataType.ConstantType<*>,
+        is DataType.NullType,
+        is DataType.UnitType -> type
+    }
+}
+
+
+internal fun TypeRefContext.computeGenericTypeSubstitutionIfAssignable( // TODO: where should this utility code live
     expectedType: DataType,
     actualType: DataType
 ): Map<DataType.TypeVariableUsage, DataType>? {
@@ -96,4 +174,6 @@ private fun TypeRefContext.sameType(left: DataType, right: DataType): Boolean = 
     is DataType.UnitType -> right is DataType.UnitType
     is DataType.TypeVariableUsage -> right is DataType.TypeVariableUsage && left.variableId == right.variableId
 }
+
+internal fun <T> identity(t: T) = t
 

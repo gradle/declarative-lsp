@@ -18,6 +18,7 @@ package org.gradle.declarative.lsp.service
 
 import org.gradle.declarative.dsl.schema.AnalysisSchema
 import org.gradle.declarative.lsp.extension.unionAnalysisSchema
+import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import java.net.URI
 
@@ -82,6 +83,10 @@ class VersionedDocumentStore {
 
         val unionSchema by lazy { 
             unionAnalysisSchema(analysisSchemas)
+        }
+
+        val typeRefContext by lazy {
+            SchemaTypeRefContext(unionSchema)
         }
 
         // Component 1

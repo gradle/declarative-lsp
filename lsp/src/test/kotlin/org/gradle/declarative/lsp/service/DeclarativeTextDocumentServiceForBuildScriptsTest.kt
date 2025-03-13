@@ -30,11 +30,11 @@ class DeclarativeTextDocumentServiceForBuildScriptsTest : AbstractDeclarativeTex
 
         assertEquals(
             "    secrets {         }",
-            script().readLines()[4]
+            script().readLines()[3]
         )
 
         assertCompletion(
-            script(), 4, 16, """
+            script(), 3, 16, """
                 |defaultPropertiesFile = layout.projectDirectory.file(path: String) --> defaultPropertiesFile = layout.projectDirectory.file("${'$'}{1}")${'$'}0
                 |defaultPropertiesFile = layout.settingsDirectory.file(path: String) --> defaultPropertiesFile = layout.settingsDirectory.file("${'$'}{1}")${'$'}0
                 |enabled = Boolean --> enabled = ${'$'}{1|true,false|}
@@ -48,20 +48,19 @@ class DeclarativeTextDocumentServiceForBuildScriptsTest : AbstractDeclarativeTex
 
         assertEquals(
             "        release {         }",
-            script().readLines()[7]
+            script().readLines()[6]
         )
 
         assertCompletion(
-            script(), 7, 21, """
+            script(), 6, 21, """
                 |baselineProfile { this: BaselineProfile } --> baselineProfile {${'\n'}|${'\t'}${'$'}0${'\n'}|}
                 |defaultProguardFiles = listOf(vararg elements: ProguardFile) --> defaultProguardFiles = listOf(${'$'}1)${'$'}0
                 |dependencies { this: AndroidLibraryDependencies } --> dependencies {${'\n'}|${'\t'}${'$'}0${'\n'}|}
                 |minify { this: Minify } --> minify {${'\n'}|${'\t'}${'$'}0${'\n'}|}
-                |proguardFile(arg0: String) --> proguardFile("${'$'}{1}")${'$'}0
+                |proguardFile(name: String) --> proguardFile("${'$'}{1}")${'$'}0
                 |proguardFiles = listOf(vararg elements: ProguardFile) --> proguardFiles = listOf(${'$'}1)${'$'}0
             """.trimMargin()
         )
-        // TODO: why is the name for the parameter in the "proguardFile(String)" function not "name" as in the source?
     }
 
 }

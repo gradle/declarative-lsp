@@ -2,8 +2,8 @@
 # https://docs.gradle.org/current/userguide/platforms.html#sub::toml-dependencies-format
 
 [versions]
-gradle-tooling = "8.14-milestone-4"
-declarative-dsl = "8.14-milestone-4"
+gradle-tooling = "9.0-branch-jb_declarative_dsl_fix_defaults_block_bug-20250312134045+0000"
+declarative-dsl = "9.0-branch-jb_declarative_dsl_fix_defaults_block_bug-20250312134045+0000"
 detekt = "1.23.6"
 lsp4j = "0.23.1"
 logback = "1.5.6"

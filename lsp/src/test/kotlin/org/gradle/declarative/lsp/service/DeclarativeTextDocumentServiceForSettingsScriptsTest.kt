@@ -88,11 +88,10 @@ class DeclarativeTextDocumentServiceForSettingsScriptsTest: AbstractDeclarativeT
                 |defaultProguardFiles = listOf(vararg elements: ProguardFile) --> defaultProguardFiles = listOf(${'$'}1)${'$'}0
                 |dependencies { this: AndroidLibraryDependencies } --> dependencies {${'\n'}|${'\t'}${'$'}0${'\n'}|}
                 |minify { this: Minify } --> minify {${'\n'}|${'\t'}${'$'}0${'\n'}|}
-                |proguardFile(arg0: String) --> proguardFile("${'$'}{1}")${'$'}0
+                |proguardFile(name: String) --> proguardFile("${'$'}{1}")${'$'}0
                 |proguardFiles = listOf(vararg elements: ProguardFile) --> proguardFiles = listOf(${'$'}1)${'$'}0
             """.trimMargin()
         )
-        // TODO: why is the name for the parameter in the "proguardFile(String)" function not "name" as in the source?
     }
 
 }

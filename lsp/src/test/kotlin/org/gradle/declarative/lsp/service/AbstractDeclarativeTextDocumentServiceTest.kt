@@ -93,7 +93,7 @@ abstract class AbstractDeclarativeTextDocumentServiceTest {
 
     @Suppress("LongMethod")
     private fun setupGradleBuild(dir: File): DeclarativeResourcesModel {
-        val androidEcosystemPluginVersion = "0.1.41"
+        val androidEcosystemPluginVersion = "0.1.42"
         settingsFile.writeText(
             """
             pluginManagement {
@@ -169,10 +169,9 @@ abstract class AbstractDeclarativeTextDocumentServiceTest {
         )
         Path("$dir/app/").createDirectories().resolve("build.gradle.dcl").writeText(
             """
-            androidApplication {
-                namespace = "org.example.app"
-            }
             androidLibrary {
+                namespace = "org.example.app"
+                
                 secrets {         }
 
                 buildTypes {

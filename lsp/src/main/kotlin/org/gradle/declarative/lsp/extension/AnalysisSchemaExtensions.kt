@@ -111,9 +111,7 @@ else {
         val mergedResult = mutableMapOf<FqName, Map<List<DataType.ParameterizedTypeInstance.TypeArgument>, DataType.ClassDataType>>()
         schemas.forEach { schema ->
             schema.genericInstantiationsByFqName.forEach { instantiation ->
-                mergedResult.merge(instantiation.key, instantiation.value) { oldVal, newVal ->
-                    oldVal + newVal // TODO: is this correct?
-                }
+                mergedResult.merge(instantiation.key, instantiation.value) { oldVal, newVal -> oldVal + newVal }
             }
         }
         mergedResult

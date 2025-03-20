@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp
+package org.gradle.declarative.lsp.service
 
 import io.mockk.mockk
 import org.eclipse.lsp4j.CompletionParams
@@ -23,31 +23,29 @@ import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TextDocumentItem
 import org.eclipse.lsp4j.services.LanguageClient
+import org.gradle.declarative.lsp.DeclarativeFeatures
+import org.gradle.declarative.lsp.DeclarativeTextDocumentService
+import org.gradle.declarative.lsp.TapiConnectionHandler
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
-import org.gradle.declarative.lsp.service.MutationRegistry
-import org.gradle.declarative.lsp.service.VersionedDocumentStore
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.Path
 import kotlin.io.path.createDirectories
-import kotlin.io.path.readLines
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 
-@Suppress("MaxLineLength")
-class DeclarativeTextDocumentServiceTest {
+abstract class AbstractDeclarativeTextDocumentServiceTest {
 
     @field:TempDir
     lateinit var buildFolder: File
 
     private lateinit var service: DeclarativeTextDocumentService
 
-    private lateinit var settingsFile: Path
-    private lateinit var buildFile: Path
+    protected lateinit var settingsFile: Path
+    protected lateinit var buildFile: Path
 
     @BeforeEach
     fun setup() {
@@ -66,74 +64,14 @@ class DeclarativeTextDocumentServiceTest {
         )
     }
 
-    @Test
-    fun `code completion inside dependencies block`() {
-        val script = settingsFile
-        openFile(script)
+    protected abstract fun script(): Path
 
-        assertEquals(
-            listOf(
-                "            dependencies {",
-                "                implementation(\"org.junit.jupiter:junit-jupiter:5.10.2\")",
-                "                runtimeOnly(\"org.junit.platform:junit-platform-launcher\")",
-                "            }",
-            ),
-            script.readLines().slice(26..29)
-        )
-
-        assertCompletion(
-            script, 27, 15, listOf(
-                """androidImplementation(dependency: ProjectDependency), androidImplementation(${'$'}1)${'$'}0""",
-                """androidImplementation(dependency: String), androidImplementation("${'$'}{1}")${'$'}0""",
-                """compileOnly(dependency: ProjectDependency), compileOnly(${'$'}1)${'$'}0""",
-                """compileOnly(dependency: String), compileOnly("${'$'}{1}")${'$'}0""",
-                """implementation(dependency: ProjectDependency), implementation(${'$'}1)${'$'}0""",
-                """implementation(dependency: String), implementation("${'$'}{1}")${'$'}0""",
-                """project(projectPath: String), project("${'$'}{1}")${'$'}0""",
-                """runtimeOnly(dependency: ProjectDependency), runtimeOnly(${'$'}1)${'$'}0""",
-                """runtimeOnly(dependency: String), runtimeOnly("${'$'}{1}")${'$'}0""",
-            )
-        )
-    }
-
-    @Test
-    fun `code completion inside block with properties`() {
-        val script = buildFile
-        openFile(script)
-
-        assertEquals(
-            listOf(
-                "androidLibrary {",
-                "    secrets {         }",
-                "}",
-            ),
-            script.readLines().slice(3..5)
-        )
-
-        assertCompletion(
-            script, 4, 16, listOf(
-                """defaultPropertiesFile = layout.projectDirectory.file(path: String), defaultPropertiesFile = layout.projectDirectory.file("${'$'}{1}")${'$'}0""",
-                """defaultPropertiesFile = layout.settingsDirectory.file(path: String), defaultPropertiesFile = layout.settingsDirectory.file("${'$'}{1}")${'$'}0""",
-                """enabled = Boolean, enabled = ${'$'}{1|true,false|}"""
-            )
-        )
-    }
-
-    private fun assertCompletion(script: Path, line: Int, column: Int, expectedCompletions: List<String>) {
+    protected fun assertCompletion(script: Path, line: Int, column: Int, expectedCompletions: String) {
         val actualCompletionItems = service.completion(completionParams(script, line, column)).get().left
         assertEquals(
-            expectedCompletions.sorted(),
-            actualCompletionItems.map { "${it.label}, ${it.insertText}" }.sorted()
+            expectedCompletions,
+            actualCompletionItems.map { "${it.label} --> ${it.insertText}" }.sorted().joinToString(separator = "\n")
         )
-    }
-
-    private fun openFile(script: Path) {
-        service.didOpen(DidOpenTextDocumentParams().apply {
-            textDocument = TextDocumentItem().apply {
-                uri = script.toUri().toString()
-                text = script.readText()
-            }
-        })
     }
 
     private fun completionParams(script: Path, line: Int, column: Int): CompletionParams {
@@ -144,8 +82,18 @@ class DeclarativeTextDocumentServiceTest {
         return completionParams
     }
 
+    protected fun openFile(script: Path) {
+        service.didOpen(DidOpenTextDocumentParams().apply {
+            textDocument = TextDocumentItem().apply {
+                uri = script.toUri().toString()
+                text = script.readText()
+            }
+        })
+    }
+
     @Suppress("LongMethod")
     private fun setupGradleBuild(dir: File): DeclarativeResourcesModel {
+        val androidEcosystemPluginVersion = "0.1.42"
         settingsFile.writeText(
             """
             pluginManagement {
@@ -156,7 +104,7 @@ class DeclarativeTextDocumentServiceTest {
             }
             
             plugins {
-                id("org.gradle.experimental.android-ecosystem").version("0.1.37")
+                id("org.gradle.experimental.android-ecosystem").version("$androidEcosystemPluginVersion")
             }
             
             rootProject.name = "example-android-app"
@@ -192,6 +140,24 @@ class DeclarativeTextDocumentServiceTest {
                             runtimeOnly("org.junit.platform:junit-platform-launcher")
                         }
                     }
+                    
+                    secrets {         }
+                    
+                    buildTypes {
+                        release {
+                            dependencies {
+                                implementation("com.squareup.okhttp3:okhttp:4.2.2")
+                            }
+                
+                            defaultProguardFiles = listOf(proguardFile("proguard-android-optimize.txt"))
+                            proguardFiles = listOf(proguardFile("proguard-rules.pro"), proguardFile("some_other_file.txt"))
+                
+                            minify {
+                                enabled = true
+                            }
+                        }
+                        debug {         }
+                    }
                 }
             }
             """.trimIndent()
@@ -203,11 +169,14 @@ class DeclarativeTextDocumentServiceTest {
         )
         Path("$dir/app/").createDirectories().resolve("build.gradle.dcl").writeText(
             """
-            androidApplication {
-                namespace = "org.example.app"
-            }
             androidLibrary {
+                namespace = "org.example.app"
+                
                 secrets {         }
+
+                buildTypes {
+                    release {         }
+                }
             }
             """.trimIndent()
         )

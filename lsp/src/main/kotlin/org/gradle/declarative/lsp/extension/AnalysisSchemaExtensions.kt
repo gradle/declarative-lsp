@@ -1,6 +1,12 @@
 package org.gradle.declarative.lsp.extension
 
-import org.gradle.declarative.dsl.schema.*
+import org.gradle.declarative.dsl.schema.AnalysisSchema
+import org.gradle.declarative.dsl.schema.DataClass
+import org.gradle.declarative.dsl.schema.DataTopLevelFunction
+import org.gradle.declarative.dsl.schema.DataType
+import org.gradle.declarative.dsl.schema.DataTypeRef
+import org.gradle.declarative.dsl.schema.EnumClass
+import org.gradle.declarative.dsl.schema.FqName
 import org.gradle.internal.declarativedsl.analysis.DefaultAnalysisSchema
 import org.gradle.internal.declarativedsl.analysis.DefaultDataClass
 import org.gradle.internal.declarativedsl.analysis.DefaultEnumClass
@@ -48,7 +54,7 @@ else {
         val properties = dataClasses.flatMap { it.properties }.distinctBy { it.name }
 
         val functions = dataClasses.flatMap { it.memberFunctions }
-            .distinctBy { listOf(it.simpleName) + it.parameters.map { it.name to typeIdentityName(it.type) } }
+            .distinctBy { listOf(it.simpleName) + it.parameters.map { param -> param.name to typeIdentityName(param.type) } }
 
         val constructors =
             dataClasses.flatMap { it.constructors }.distinctBy { it.parameters.map { typeIdentityName(it.type) } }
@@ -73,7 +79,7 @@ else {
                 enumTypes.first().javaTypeName,
                 enumTypes.flatMap { it.entryNames }.distinct()
             )
-        
+
         schemas.flatMap { it.dataClassTypesByFqName.values }.groupBy { it.name }
             .mapValues { (_, dataClasses) ->
                 when {
@@ -93,10 +99,30 @@ else {
         }
     }
 
+    val newExternalFunctionsByFqName = run {
+        val mergedResult = mutableMapOf<FqName, DataTopLevelFunction>()
+        schemas.forEach { schema ->
+            mergedResult.putAll(schema.externalFunctionsByFqName)
+        }
+        mergedResult
+    }
+
+    val genericInstantiationsByFqName = run {
+        val mergedResult = mutableMapOf<FqName, Map<List<DataType.ParameterizedTypeInstance.TypeArgument>, DataType.ClassDataType>>()
+        schemas.forEach { schema ->
+            schema.genericInstantiationsByFqName.forEach { instantiation ->
+                mergedResult.merge(instantiation.key, instantiation.value) { oldVal, newVal -> oldVal + newVal }
+            }
+        }
+        mergedResult
+    }
+
     DefaultAnalysisSchema(
         newTopLevelReceiver,
         dataClassesByFqName,
         emptyMap(),
+        genericInstantiationsByFqName,
+        newExternalFunctionsByFqName,
         emptyMap(),
         emptySet()
     )
@@ -108,4 +134,5 @@ private fun typeIdentityName(typeRef: DataTypeRef) = when (typeRef) {
         is DataType.ClassDataType -> type.name.qualifiedName
         else -> type.toString()
     }
+    is DataTypeRef.NameWithArgs -> TODO()
 }

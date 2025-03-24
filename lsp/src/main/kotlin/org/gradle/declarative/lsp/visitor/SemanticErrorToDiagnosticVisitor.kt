@@ -23,6 +23,7 @@ import org.gradle.internal.declarativedsl.dom.BlockMismatch
 import org.gradle.internal.declarativedsl.dom.CrossScopeAccess
 import org.gradle.internal.declarativedsl.dom.DeclarativeDocument
 import org.gradle.internal.declarativedsl.dom.DocumentResolution
+import org.gradle.internal.declarativedsl.dom.IllegalAugmentedAssignment
 import org.gradle.internal.declarativedsl.dom.IsError
 import org.gradle.internal.declarativedsl.dom.NonEnumValueNamedReference
 import org.gradle.internal.declarativedsl.dom.NotAssignable
@@ -67,6 +68,7 @@ class SemanticErrorToDiagnosticVisitor(private val documentOverlayResult: Docume
         ValueTypeMismatch -> "Value type mismatch"
         NonEnumValueNamedReference -> "Non-enum value named reference"
         OpaqueValueInIdentityKey -> "Non-literal value used as identity key"
+        IllegalAugmentedAssignment -> "Illegal augmented assignment"
     }
 
 }

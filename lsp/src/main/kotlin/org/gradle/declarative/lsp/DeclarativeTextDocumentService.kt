@@ -41,11 +41,11 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.gradle.declarative.dsl.schema.AnalysisSchema
+import org.gradle.declarative.dsl.schema.AssignmentAugmentationKind
 import org.gradle.declarative.dsl.schema.DataClass
 import org.gradle.declarative.dsl.schema.DataProperty
 import org.gradle.declarative.dsl.schema.DataType
 import org.gradle.declarative.dsl.schema.EnumClass
-import org.gradle.declarative.dsl.schema.SchemaFunction
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
 import org.gradle.declarative.lsp.extension.toLspRange
@@ -188,8 +188,10 @@ class DeclarativeTextDocumentService : TextDocumentService {
                     .let { it ?: schema.topLevelReceiverType }
                     .let { dataClass ->
                         computePropertyCompletions(dataClass, typeRefContext) +
-                        computePropertyByValueFactoryCompletions(dataClass, typeRefContext, valueFactoryIndex) +
-                        computeFunctionCompletions(dataClass, typeRefContext)
+                            computePropertyByValueFactoryCompletions(
+                                dataClass, schema, typeRefContext, valueFactoryIndex
+                            ) +
+                            computeFunctionCompletions(dataClass, typeRefContext)
                     }
             }
         }.orEmpty().toMutableList()
@@ -380,6 +382,7 @@ private fun completionItem(property: DataProperty, resolvedType: DataType) =
 
 private fun computePropertyByValueFactoryCompletions(
     dataClass: DataClass,
+    schema: AnalysisSchema,
     typeRefContext: TypeRefContext,
     valueFactoryIndex: ValueFactoryIndex,
 ): List<CompletionItem> {
@@ -388,18 +391,34 @@ private fun computePropertyByValueFactoryCompletions(
         if (propertiesType is DataType.ClassDataType) {
             val factoriesForProperty = valueFactoryIndex.factoriesForProperty(propertiesType.name)
             factoriesForProperty
-                ?.mapNotNull { indexEntry ->
+                ?.flatMap { indexEntry ->
                     val functionReturnType = typeRefContext.resolveRef(indexEntry.function.returnValueType)
                     val genericTypeSubstitution = typeRefContext.computeGenericTypeSubstitutionIfAssignable(propertiesType, functionReturnType)
                     genericTypeSubstitution?.let { typeSubstitution ->
                         val completionLabel = indexEntry.function.computeCompletionLabel(typeRefContext, typeSubstitution)
                         val insertionText = indexEntry.function.computeCompletionInsertText(typeRefContext)
-                        CompletionItem("${property.name} = ${indexEntry.namePrefix}$completionLabel").apply {
-                            kind = CompletionItemKind.Field
-                            insertTextFormat = InsertTextFormat.Snippet
-                            insertText = "${property.name} = ${indexEntry.namePrefix}$insertionText"
+
+                        fun propertyCompletionItem(withPlus: Boolean): CompletionItem {
+                            val operator = if (withPlus) "+=" else "="
+                            
+                            return CompletionItem(
+                                "${property.name} $operator ${indexEntry.namePrefix}$completionLabel"
+                            ).apply {
+                                kind = if (withPlus) CompletionItemKind.Method else CompletionItemKind.Field
+                                insertTextFormat = InsertTextFormat.Snippet
+                                insertText = "${property.name} $operator ${indexEntry.namePrefix}$insertionText"
+                            }
                         }
-                    }
+
+                        val hasPlusEqualsAugmentation = schema.assignmentAugmentationsByTypeName[propertiesType.name]
+                            .orEmpty()
+                            .any { it.kind is AssignmentAugmentationKind.Plus }
+                        
+                        listOfNotNull(
+                            propertyCompletionItem(false),
+                            if (hasPlusEqualsAugmentation) { propertyCompletionItem(true) } else null
+                        )
+                    }.orEmpty()
                 } ?: emptyList()
         } else {
             emptyList()

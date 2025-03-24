@@ -54,10 +54,12 @@ class DeclarativeTextDocumentServiceForBuildScriptsTest : AbstractDeclarativeTex
         assertCompletion(
             script(), 6, 21, """
                 |baselineProfile { this: BaselineProfile } --> baselineProfile {${'\n'}|${'\t'}${'$'}0${'\n'}|}
+                |defaultProguardFiles += listOf(vararg elements: ProguardFile) --> defaultProguardFiles += listOf(${'$'}1)${'$'}0
                 |defaultProguardFiles = listOf(vararg elements: ProguardFile) --> defaultProguardFiles = listOf(${'$'}1)${'$'}0
                 |dependencies { this: AndroidLibraryDependencies } --> dependencies {${'\n'}|${'\t'}${'$'}0${'\n'}|}
                 |minify { this: Minify } --> minify {${'\n'}|${'\t'}${'$'}0${'\n'}|}
                 |proguardFile(name: String) --> proguardFile("${'$'}{1}")${'$'}0
+                |proguardFiles += listOf(vararg elements: ProguardFile) --> proguardFiles += listOf(${'$'}1)${'$'}0
                 |proguardFiles = listOf(vararg elements: ProguardFile) --> proguardFiles = listOf(${'$'}1)${'$'}0
             """.trimMargin()
         )

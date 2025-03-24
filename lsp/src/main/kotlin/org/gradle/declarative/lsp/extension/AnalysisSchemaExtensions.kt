@@ -11,6 +11,7 @@ import org.gradle.internal.declarativedsl.analysis.DefaultAnalysisSchema
 import org.gradle.internal.declarativedsl.analysis.DefaultDataClass
 import org.gradle.internal.declarativedsl.analysis.DefaultEnumClass
 import org.gradle.internal.declarativedsl.analysis.DefaultFqName
+import kotlin.collections.flatten
 
 /*
  * Copyright 2024 the original author or authors.
@@ -108,7 +109,8 @@ else {
     }
 
     val genericInstantiationsByFqName = run {
-        val mergedResult = mutableMapOf<FqName, Map<List<DataType.ParameterizedTypeInstance.TypeArgument>, DataType.ClassDataType>>()
+        val mergedResult =
+            mutableMapOf<FqName, Map<List<DataType.ParameterizedTypeInstance.TypeArgument>, DataType.ClassDataType>>()
         schemas.forEach { schema ->
             schema.genericInstantiationsByFqName.forEach { instantiation ->
                 mergedResult.merge(instantiation.key, instantiation.value) { oldVal, newVal -> oldVal + newVal }
@@ -117,6 +119,11 @@ else {
         mergedResult
     }
 
+    val augmentations =
+        schemas.flatMap { it.assignmentAugmentationsByTypeName.entries }
+            .groupBy({ it.key }, { it.value })
+            .mapValues { (_, value) -> value.flatten() }
+
     DefaultAnalysisSchema(
         newTopLevelReceiver,
         dataClassesByFqName,
@@ -124,7 +131,8 @@ else {
         genericInstantiationsByFqName,
         newExternalFunctionsByFqName,
         emptyMap(),
-        emptySet()
+        schemas.flatMapTo(mutableSetOf()) { it.defaultImports },
+        augmentations
     )
 }
 

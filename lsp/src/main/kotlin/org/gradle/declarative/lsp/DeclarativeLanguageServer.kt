@@ -33,10 +33,13 @@ import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.eclipse.lsp4j.services.WorkspaceService
+import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
+import org.gradle.declarative.lsp.mutation.MutationRegistry
 import org.gradle.declarative.lsp.mutation.definition.AddLibraryDependency
 import org.gradle.declarative.lsp.mutation.definition.SetJavaVersion
-import org.gradle.declarative.lsp.service.MutationRegistry
+import org.gradle.declarative.lsp.service.DeclarativeModelStore
 import org.gradle.declarative.lsp.service.VersionedDocumentStore
+import org.gradle.declarative.lsp.service.withToolingApi
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URI
@@ -102,34 +105,36 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         }
 
         LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
-        TapiConnectionHandler(workspaceFolderFile).let {
-            val declarativeResources = it.getDeclarativeResources()
-
-            // Create services shared between the LSP services
-            val documentStore = VersionedDocumentStore()
-            val mutationRegistry = MutationRegistry(
-                declarativeResources,
-                listOf(
-                    SetJavaVersion(),
-                    AddLibraryDependency()
-                )
-            )
-
-            // Initialize the LSP services
-            textDocumentService.initialize(
-                client,
-                documentStore,
-                mutationRegistry,
-                declarativeFeatures,
-                declarativeResources
-            )
-            workspaceService.initialize(
-                client,
-                documentStore,
-                mutationRegistry,
-                declarativeResources
-            )
+        val declarativeResources = withToolingApi(workspaceFolderFile) {
+            it.getModel(DeclarativeResourcesModel::class.java)
         }
+
+        // Create services shared between the LSP services
+        val documentStore = VersionedDocumentStore()
+        val declarativeModelStore = DeclarativeModelStore(workspaceFolderFile).apply {
+            updateModel()
+        }
+        val mutationRegistry = MutationRegistry(
+            listOf(
+                SetJavaVersion(),
+                AddLibraryDependency()
+            )
+        )
+
+        // Initialize the LSP services
+        textDocumentService.initialize(
+            client,
+            documentStore,
+            mutationRegistry,
+            declarativeFeatures,
+            declarativeModelStore
+        )
+        workspaceService.initialize(
+            client,
+            documentStore,
+            mutationRegistry,
+            declarativeModelStore
+        )
 
         initialized = true
         LOGGER.info("Gradle Declarative Language Server: initialized")
@@ -148,12 +153,10 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
     }
 
     override fun getTextDocumentService(): TextDocumentService {
-        LOGGER.info("Gradle Declarative Language Server: getTextDocumentService")
         return textDocumentService
     }
 
     override fun getWorkspaceService(): WorkspaceService {
-        LOGGER.info("Gradle Declarative Language Server: getWorkspaceService")
         return workspaceService
     }
 

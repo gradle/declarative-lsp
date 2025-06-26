@@ -46,10 +46,10 @@ import org.gradle.declarative.dsl.schema.DataClass
 import org.gradle.declarative.dsl.schema.DataProperty
 import org.gradle.declarative.dsl.schema.DataType
 import org.gradle.declarative.dsl.schema.EnumClass
-import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
 import org.gradle.declarative.lsp.extension.toLspRange
-import org.gradle.declarative.lsp.service.MutationRegistry
+import org.gradle.declarative.lsp.mutation.MutationRegistry
+import org.gradle.declarative.lsp.service.DeclarativeModelStore
 import org.gradle.declarative.lsp.service.VersionedDocumentStore
 import org.gradle.declarative.lsp.service.VersionedDocumentStore.DocumentStoreEntry
 import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
@@ -63,7 +63,6 @@ import org.gradle.internal.declarativedsl.dom.mutation.MutationParameterKind
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils.resolvedDocument
-import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
 import org.gradle.internal.declarativedsl.evaluator.runner.stepResultOrPartialResult
 import org.slf4j.LoggerFactory
 import java.net.URI
@@ -78,15 +77,14 @@ class DeclarativeTextDocumentService : TextDocumentService {
     private lateinit var valueFactoryIndexStore: ValueFactoryIndexStore
     private lateinit var mutationRegistry: MutationRegistry
     private lateinit var declarativeFeatures: DeclarativeFeatures
-    private lateinit var declarativeResources: DeclarativeResourcesModel
-    private lateinit var schemaAnalysisEvaluator: SimpleAnalysisEvaluator
+    private lateinit var declarativeResources: DeclarativeModelStore
 
     fun initialize(
         client: LanguageClient,
         documentStore: VersionedDocumentStore,
         mutationRegistry: MutationRegistry,
         declarativeFeatures: DeclarativeFeatures,
-        declarativeResources: DeclarativeResourcesModel
+        declarativeResources: DeclarativeModelStore
     ) {
         this.client = client
         this.declarativeFeatures = declarativeFeatures
@@ -94,11 +92,6 @@ class DeclarativeTextDocumentService : TextDocumentService {
         this.valueFactoryIndexStore = ValueFactoryIndexStore()
         this.mutationRegistry = mutationRegistry
         this.declarativeResources = declarativeResources
-
-        this.schemaAnalysisEvaluator = SimpleAnalysisEvaluator.withSchema(
-            declarativeResources.settingsInterpretationSequence,
-            declarativeResources.projectInterpretationSequence
-        )
     }
 
     // LSP Functions ---------------------------------------------------------------------------------------------------
@@ -324,7 +317,8 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
     private fun parse(uri: URI, text: String): ParsedDocument {
         val fileName = uri.path.substringAfterLast('/')
-        val analysisResult = schemaAnalysisEvaluator.evaluate(fileName, text)
+        // FIXME: temporary patch to accept a non-null analysis result
+        val analysisResult = declarativeResources.schemaAnalysisEvaluator()!!.evaluate(fileName, text)
 
         // Workaround: for now, the mutation utilities cannot handle mutations that touch the underlay document content.
         // To avoid that, use the utility that produces an overlay result with no real underlay content.

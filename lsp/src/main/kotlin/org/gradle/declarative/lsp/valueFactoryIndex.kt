@@ -22,7 +22,6 @@ import org.gradle.declarative.dsl.schema.DataTypeRef
 import org.gradle.declarative.dsl.schema.FqName
 import org.gradle.declarative.dsl.schema.FunctionSemantics
 import org.gradle.declarative.dsl.schema.SchemaFunction
-import org.gradle.declarative.lsp.service.VersionedDocumentStore
 import org.gradle.internal.declarativedsl.analysis.TypeRefContext
 
 class ValueFactoryIndex(storeEntry: VersionedDocumentStore.DocumentStoreEntry) {

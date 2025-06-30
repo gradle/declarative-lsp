@@ -50,7 +50,7 @@ import kotlin.system.exitProcess
  */
 class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
 
-    // LSP state
+    // LSP state holders
     private var declarativeModelStore: DeclarativeModelStore? = null
     private val documentStore = VersionedDocumentStore()
     private var initialized = false
@@ -117,14 +117,11 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
             )
         }
 
-        LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
-
-
-        // Create services shared between the LSP services
         declarativeModelStore = DeclarativeModelStore(workspaceFolderFile).apply {
-            updateModel()
-        }.apply {
-            // Initialize the LSP services
+            // We immediately try to sync the declarative model.
+            // The synchronization might be unsuccessful if the project is broken, but it won't crash the server.
+            this.updateModel()
+            // Initialize the core LSP services
             textDocumentService.initialize(
                 client,
                 documentStore,

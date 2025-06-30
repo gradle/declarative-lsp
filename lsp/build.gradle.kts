@@ -109,6 +109,10 @@ tasks {
             attributes["Main-Class"] = "org.gradle.declarative.lsp.MainKt"
         }
     }
+
+    check {
+        dependsOn(testing.suites)
+    }
 }
 
 fun timestamp(): String {

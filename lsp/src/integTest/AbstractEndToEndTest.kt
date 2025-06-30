@@ -22,6 +22,8 @@ import org.eclipse.lsp4j.InitializeResult
 import org.eclipse.lsp4j.WorkspaceFolder
 import org.eclipse.lsp4j.services.LanguageClient
 import org.gradle.declarative.lsp.DeclarativeLanguageServer
+import org.gradle.declarative.lsp.DeclarativeTextDocumentService
+import org.gradle.declarative.lsp.DeclarativeWorkspaceService
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import java.io.File
@@ -32,8 +34,8 @@ abstract class AbstractEndToEndTest {
     protected lateinit var languageClient: LanguageClient
     protected lateinit var languageServer: DeclarativeLanguageServer
 
-    protected val workspaceServices get() = languageServer.workspaceService
-    protected val textDocumentService get() = languageServer.textDocumentService
+    protected val workspaceServices get() = languageServer.workspaceService as DeclarativeWorkspaceService
+    protected val textDocumentService get() = languageServer.textDocumentService as DeclarativeTextDocumentService
 
     @BeforeEach
     fun setup() {
@@ -48,8 +50,15 @@ abstract class AbstractEndToEndTest {
         languageServer.shutdown()
     }
 
-    fun initializeStandardProject(projectDir: File) {
-        // Make the project wrapper
+    /**
+     * Utility test function, that bootstraps the language server with a project directory.
+     *
+     */
+    fun initializeWithProjectDir(
+        projectDir: File,
+        additionalConfiguration: ((InitializeParams) -> Unit)? = null
+    ): CompletableFuture<InitializeResult> {
+        // Setting up the wrapper
         projectDir.resolve("gradle/wrapper/gradle-wrapper.properties").apply {
             parentFile.mkdirs()
             writeText(
@@ -58,18 +67,12 @@ abstract class AbstractEndToEndTest {
                 """.trimIndent()
             )
         }
-    }
 
-    // Utility functions to help testing
-    fun initializeWithProjectDir(
-        projectDir: File,
-        additionalConfiguration: ((InitializeParams) -> Unit)? = null
-    ): CompletableFuture<InitializeResult> {
-        val projectUri = projectDir.toURI().toString()
+        // Assemble the InitializeParams with the project directory
         val params = InitializeParams().apply {
             workspaceFolders = listOf(
                 WorkspaceFolder(
-                    projectUri,
+                    projectDir.toURI().toString(),
                     "projectDir"
                 )
             )
@@ -79,6 +82,7 @@ abstract class AbstractEndToEndTest {
             additionalConfiguration(params)
         }
 
+        // Kickstart the language server initialization
         return languageServer.initialize(params)
     }
 

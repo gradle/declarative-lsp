@@ -31,9 +31,16 @@ import java.util.concurrent.CompletableFuture
 
 abstract class AbstractEndToEndTest {
 
+    /**
+     * Mocked [LanguageClient] that can be used to check on the server -> client communication.
+     */
     protected lateinit var languageClient: LanguageClient
-    protected lateinit var languageServer: DeclarativeLanguageServer
 
+    /**
+     * Unit under test language server
+     */
+    protected lateinit var languageServer: DeclarativeLanguageServer
+    // These are convenience properties to access the specific services in `DeclarativeLanguageServer`
     protected val workspaceServices get() = languageServer.workspaceService as DeclarativeWorkspaceService
     protected val textDocumentService get() = languageServer.textDocumentService as DeclarativeTextDocumentService
 

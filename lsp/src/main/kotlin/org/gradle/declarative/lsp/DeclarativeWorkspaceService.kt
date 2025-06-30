@@ -31,8 +31,6 @@ import org.eclipse.lsp4j.WorkspaceEdit
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.WorkspaceService
 import org.gradle.declarative.lsp.mutation.MutationRegistry
-import org.gradle.declarative.lsp.service.DeclarativeModelStore
-import org.gradle.declarative.lsp.service.VersionedDocumentStore
 import org.gradle.internal.declarativedsl.dom.mutation.ModelMutationStepResult
 import org.gradle.internal.declarativedsl.dom.mutation.MutationArgumentContainer
 import org.gradle.internal.declarativedsl.dom.mutation.MutationAsTextRunner

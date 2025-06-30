@@ -46,12 +46,10 @@ import org.gradle.declarative.dsl.schema.DataClass
 import org.gradle.declarative.dsl.schema.DataProperty
 import org.gradle.declarative.dsl.schema.DataType
 import org.gradle.declarative.dsl.schema.EnumClass
+import org.gradle.declarative.lsp.VersionedDocumentStore.DocumentStoreEntry
 import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
 import org.gradle.declarative.lsp.extension.toLspRange
 import org.gradle.declarative.lsp.mutation.MutationRegistry
-import org.gradle.declarative.lsp.service.DeclarativeModelStore
-import org.gradle.declarative.lsp.service.VersionedDocumentStore
-import org.gradle.declarative.lsp.service.VersionedDocumentStore.DocumentStoreEntry
 import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor

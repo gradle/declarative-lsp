@@ -33,13 +33,11 @@ import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.eclipse.lsp4j.services.WorkspaceService
+import org.gradle.declarative.lsp.ToolingApiConnector.withToolingApi
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.mutation.MutationRegistry
 import org.gradle.declarative.lsp.mutation.definition.AddLibraryDependency
 import org.gradle.declarative.lsp.mutation.definition.SetJavaVersion
-import org.gradle.declarative.lsp.service.DeclarativeModelStore
-import org.gradle.declarative.lsp.service.VersionedDocumentStore
-import org.gradle.declarative.lsp.service.withToolingApi
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URI

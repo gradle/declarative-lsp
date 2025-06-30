@@ -16,6 +16,7 @@
 
 package org.gradle.declarative.lsp.e2e
 
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
@@ -28,13 +29,12 @@ class InvalidGradleProjectTests: AbstractEndToEndTest() {
         val settingsFile = projectDir.resolve("settings.gradle")
         settingsFile.writeText("INVALID SETTINGS FILE")
 
-        // Start the server with the project directory
-        testLspServerStart()
-        // Initialize the language server
-        testLspServerInitialize()
-        // Read a line from the server output to ensure it started
-        val serverOutput = serverToClientStream.bufferedReader().readLine()
-        println(serverOutput)
+        // Initialize the project
+        val initializeResult = initializeWithProjectDir(projectDir)
+
+        // Assert that the server starts without crashing
+        // This does not mean that the server can respond to requests, as it would need a valid project model
+        assertNotNull(initializeResult.get())
     }
 
 }

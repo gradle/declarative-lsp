@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.service
+package org.gradle.declarative.lsp
 
+import org.gradle.declarative.lsp.ToolingApiConnector.withToolingApi
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
-import org.gradle.tooling.GradleConnector
-import org.gradle.tooling.ProjectConnection
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -35,7 +34,7 @@ class DeclarativeModelStore(val projectRoot: File) {
     private var declarativeModel: DeclarativeResourcesModel? = null
 
     fun updateModel() {
-        val fetchedDeclarativeModel = withToolingApi(projectRoot) {
+        declarativeModel = withToolingApi(projectRoot) {
             it.getModel(DeclarativeResourcesModel::class.java)
         }
     }
@@ -47,29 +46,10 @@ class DeclarativeModelStore(val projectRoot: File) {
         )
     }
 
+
+
     companion object {
         private val LOGGER = LoggerFactory.getLogger(DeclarativeModelStore::class.java)
-    }
-}
-
-/**
- * Executes the given action using the Gradle Tooling API for the specified project root.
- */
-fun <T> withToolingApi(
-    projectRoot: File,
-    action: (ProjectConnection) -> T
-): T? {
-    var connection: ProjectConnection? = null
-    try {
-        connection = GradleConnector
-            .newConnector()
-            .forProjectDirectory(projectRoot)
-            .connect()
-        return action(connection)
-    } catch (e: Exception) {
-        return null
-    } finally {
-        connection?.close()
     }
 }
 

@@ -65,5 +65,4 @@ class InvalidGradleProjectTests : AbstractEndToEndTest() {
         )
         assertTrue(languageServer.isInitialized(), "Server should be initialized after fixing the settings file")
     }
-
 }

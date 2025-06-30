@@ -33,8 +33,6 @@ import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.eclipse.lsp4j.services.WorkspaceService
-import org.gradle.declarative.lsp.ToolingApiConnector.withToolingApi
-import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.mutation.MutationRegistry
 import org.gradle.declarative.lsp.mutation.definition.AddLibraryDependency
 import org.gradle.declarative.lsp.mutation.definition.SetJavaVersion
@@ -44,13 +42,30 @@ import java.net.URI
 import java.util.concurrent.CompletableFuture
 import kotlin.system.exitProcess
 
+/**
+ * Top-level class implementing the language server.
+ *
+ * This class is responsible for holding onto centralized state holders,
+ * and distributing them to specific LSP services like [DeclarativeTextDocumentService] and [DeclarativeWorkspaceService].
+ */
 class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
+
+    // LSP state
+    private var declarativeModelStore: DeclarativeModelStore? = null
+    private val documentStore = VersionedDocumentStore()
+    private var initialized = false
+    private var tracingLevel = TraceValue.Off
+    private val mutationRegistry = MutationRegistry(
+        listOf(
+            SetJavaVersion(),
+            AddLibraryDependency()
+        )
+    )
+
+    // LSP services
+    private lateinit var client: LanguageClient
     private val textDocumentService = DeclarativeTextDocumentService()
     private val workspaceService = DeclarativeWorkspaceService()
-
-    private lateinit var client: LanguageClient
-    private var initialized = false
-    private var tracingLevel = TraceValue.Off;
 
     private fun checkInitialized() {
         require(initialized) {
@@ -103,36 +118,27 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         }
 
         LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
-        val declarativeResources = withToolingApi(workspaceFolderFile) {
-            it.getModel(DeclarativeResourcesModel::class.java)
-        }
+
 
         // Create services shared between the LSP services
-        val documentStore = VersionedDocumentStore()
-        val declarativeModelStore = DeclarativeModelStore(workspaceFolderFile).apply {
+        declarativeModelStore = DeclarativeModelStore(workspaceFolderFile).apply {
             updateModel()
-        }
-        val mutationRegistry = MutationRegistry(
-            listOf(
-                SetJavaVersion(),
-                AddLibraryDependency()
+        }.apply {
+            // Initialize the LSP services
+            textDocumentService.initialize(
+                client,
+                documentStore,
+                mutationRegistry,
+                declarativeFeatures,
+                this
             )
-        )
-
-        // Initialize the LSP services
-        textDocumentService.initialize(
-            client,
-            documentStore,
-            mutationRegistry,
-            declarativeFeatures,
-            declarativeModelStore
-        )
-        workspaceService.initialize(
-            client,
-            documentStore,
-            mutationRegistry,
-            declarativeModelStore
-        )
+            workspaceService.initialize(
+                client,
+                documentStore,
+                mutationRegistry,
+                this
+            )
+        }
 
         initialized = true
         LOGGER.info("Gradle Declarative Language Server: initialized")
@@ -161,6 +167,14 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
     override fun setTrace(params: SetTraceParams?) {
         checkInitialized()
         tracingLevel = params?.value ?: TraceValue.Off
+    }
+
+    /**
+     * Checks if the language server is initialized and the declarative model store is available.
+     * Used mainly by tests to ensure the LSP state.
+     */
+    fun isInitialized(): Boolean {
+        return declarativeModelStore?.isAvailable() ?: false;
     }
 
     companion object {

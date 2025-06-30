@@ -61,7 +61,6 @@ class DeclarativeWorkspaceService : WorkspaceService {
         this.documentStore = documentStore
         this.mutationRegistry = mutationRegistry
         this.declarativeResources = declarativeResources
-
     }
 
     override fun didChangeConfiguration(params: DidChangeConfigurationParams?) {

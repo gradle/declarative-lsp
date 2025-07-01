@@ -144,7 +144,7 @@ class DeclarativeTextDocumentService : TextDocumentService {
         params?.let {
             val uri = URI(it.textDocument.uri)
             // If the document is a settings file, we make an attempt updating the model
-            if (uri.path.endsWith("settings.gradle") || uri.path.endsWith("settings.gradle")) {
+            if (uri.path.endsWith("settings.gradle") || uri.path.endsWith("settings.gradle.kts")) {
                 LOGGER.info("Settings file changed, reloading declarative model")
                 declarativeResources.updateModel()
             }

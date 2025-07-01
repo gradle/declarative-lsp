@@ -23,11 +23,8 @@ import org.slf4j.LoggerFactory
 import java.io.File
 
 /**
- * This class is responsible for storing, updating, and managing downstream dependencies of [DeclarativeResourcesModel].
- *
- * This complicated state management is necessary because the underlying Gradle model is:
- *  - Not always available (project might be broken)
- *  - Can change at any time (e.g. when a user edits the build file)
+ * This class is responsible for managing the state of the underlying project's declarative model,
+ * fetched by the Tooling API.
  */
 class DeclarativeModelStore(val projectRoot: File) {
 
@@ -73,5 +70,3 @@ class DeclarativeModelStore(val projectRoot: File) {
         private val LOGGER = LoggerFactory.getLogger(DeclarativeModelStore::class.java)
     }
 }
-
-

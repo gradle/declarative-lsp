@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.service
+package org.gradle.declarative.lsp
 
 import io.mockk.mockk
 import org.eclipse.lsp4j.CompletionParams
@@ -23,10 +23,6 @@ import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TextDocumentItem
 import org.eclipse.lsp4j.services.LanguageClient
-import org.gradle.declarative.lsp.DeclarativeFeatures
-import org.gradle.declarative.lsp.DeclarativeModelStore
-import org.gradle.declarative.lsp.DeclarativeTextDocumentService
-import org.gradle.declarative.lsp.VersionedDocumentStore
 import org.gradle.declarative.lsp.mutation.MutationRegistry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.io.TempDir

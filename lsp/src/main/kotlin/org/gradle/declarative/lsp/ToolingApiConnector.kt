@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 the original author or authors.
+ * Copyright 2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,36 +16,43 @@
 
 package org.gradle.declarative.lsp
 
-import org.gradle.declarative.lsp.build.action.GetDeclarativeResourcesModel
-import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.tooling.GradleConnector
-import org.gradle.tooling.ProgressEvent
-import org.gradle.tooling.ProgressListener
 import org.gradle.tooling.ProjectConnection
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
 
-private val LOGGER = LoggerFactory.getLogger(TapiConnectionHandler::class.java)
+/**
+ * Utility object helping the handling of the Gradle Tooling API connections.
+ */
+object ToolingApiConnector {
 
-class TapiConnectionHandler(val projectRoot: File): ProgressListener {
+    val LOGGER: Logger = LoggerFactory.getLogger(ToolingApiConnector::class.java)
 
-    fun getDeclarativeResources(): DeclarativeResourcesModel {
+    /**
+     * Executes the given action using the Gradle Tooling API for the specified project root.
+     *
+     * @param projectRoot The root directory of the Gradle project.
+     * @param action The action to execute in the scope of the Tooling API connection.
+     * @return The result of the action, or `null` if an error occurred.
+     */
+    fun <T> withToolingApi(
+        projectRoot: File,
+        action: (ProjectConnection) -> T
+    ): T? {
         var connection: ProjectConnection? = null
         try {
             connection = GradleConnector
                 .newConnector()
                 .forProjectDirectory(projectRoot)
                 .connect()
-            return connection
-                .action(GetDeclarativeResourcesModel())
-                .addProgressListener(this)
-                .run()
+            return action(connection)
+        } catch (e: Exception) {
+            LOGGER.error("Failed to execute Tooling API action", e)
+            return null
         } finally {
             connection?.close()
         }
     }
 
-    override fun statusChanged(event: ProgressEvent?) {
-        LOGGER.info("${event?.description}")
-    }
 }

@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.service
+package org.gradle.declarative.lsp
 
 import org.gradle.declarative.dsl.model.annotations.Restricted
-import org.gradle.declarative.dsl.schema.AnalysisSchema
 import org.gradle.declarative.dsl.schema.DataType
 import org.gradle.declarative.dsl.schema.SchemaFunction
-import org.gradle.declarative.lsp.computeGenericTypeSubstitutionIfAssignable
 import org.gradle.internal.declarativedsl.analysis.DefaultFqName
 import org.gradle.internal.declarativedsl.analysis.SchemaTypeRefContext
 import org.gradle.internal.declarativedsl.schemaBuilder.FixedTopLevelFunctionDiscovery

@@ -11,7 +11,6 @@ import org.gradle.internal.declarativedsl.analysis.DefaultAnalysisSchema
 import org.gradle.internal.declarativedsl.analysis.DefaultDataClass
 import org.gradle.internal.declarativedsl.analysis.DefaultEnumClass
 import org.gradle.internal.declarativedsl.analysis.DefaultFqName
-import kotlin.collections.flatten
 
 /*
  * Copyright 2024 the original author or authors.

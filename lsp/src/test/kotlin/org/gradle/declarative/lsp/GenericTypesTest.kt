@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.service
+package org.gradle.declarative.lsp
 
 import org.gradle.declarative.dsl.schema.DataType
 import org.gradle.internal.declarativedsl.language.DataTypeInternal

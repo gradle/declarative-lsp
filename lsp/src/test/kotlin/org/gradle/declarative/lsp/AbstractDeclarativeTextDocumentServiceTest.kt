@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.service
+package org.gradle.declarative.lsp
 
 import io.mockk.mockk
 import org.eclipse.lsp4j.CompletionParams
@@ -23,10 +23,7 @@ import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TextDocumentItem
 import org.eclipse.lsp4j.services.LanguageClient
-import org.gradle.declarative.lsp.DeclarativeFeatures
-import org.gradle.declarative.lsp.DeclarativeTextDocumentService
-import org.gradle.declarative.lsp.TapiConnectionHandler
-import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
+import org.gradle.declarative.lsp.mutation.MutationRegistry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
@@ -58,7 +55,7 @@ abstract class AbstractDeclarativeTextDocumentServiceTest {
         service.initialize(
             mockk<LanguageClient>(relaxed = true),
             VersionedDocumentStore(),
-            MutationRegistry(declarativeResources, emptyList()),
+            MutationRegistry(emptyList()),
             DeclarativeFeatures(),
             declarativeResources
         )
@@ -92,7 +89,7 @@ abstract class AbstractDeclarativeTextDocumentServiceTest {
     }
 
     @Suppress("LongMethod")
-    private fun setupGradleBuild(dir: File): DeclarativeResourcesModel {
+    private fun setupGradleBuild(dir: File): DeclarativeModelStore {
         val androidEcosystemPluginVersion = "0.1.42"
         settingsFile.writeText(
             """
@@ -198,7 +195,11 @@ abstract class AbstractDeclarativeTextDocumentServiceTest {
             """.trimIndent()
         )
 
-        return TapiConnectionHandler(dir).getDeclarativeResources()
+        return DeclarativeModelStore(
+            dir,
+        ).apply {
+            updateModel()
+        }
     }
 
 }

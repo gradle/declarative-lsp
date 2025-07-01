@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.service
+package org.gradle.declarative.lsp.mutation
 
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.util.Ranges
 import org.gradle.declarative.dsl.schema.AnalysisSchema
-import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.toLspRange
 import org.gradle.internal.declarativedsl.dom.mutation.MutationApplicability
 import org.gradle.internal.declarativedsl.dom.mutation.MutationApplicabilityChecker
@@ -28,7 +27,6 @@ import org.gradle.internal.declarativedsl.dom.resolution.DocumentWithResolution
 import java.net.URI
 
 class MutationRegistry(
-    private val declarativeResources: DeclarativeResourcesModel,
     private val possibleMutations: List<MutationDefinition>
 ) {
     private val applicableMutations: MutableMap<URI, List<Pair<MutationDefinition, MutationApplicability>>> =

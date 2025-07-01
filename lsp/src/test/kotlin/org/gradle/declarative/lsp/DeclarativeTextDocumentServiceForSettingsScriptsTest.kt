@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.service
+package org.gradle.declarative.lsp
 
 import org.junit.jupiter.api.Test
 import kotlin.io.path.readLines

@@ -170,7 +170,7 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
      * Checks if the language server is initialized and the declarative model store is available.
      * Used mainly by tests to check on the langauge server's internal state.
      */
-    fun isInitialized(): Boolean {
+    fun isModelAvailable(): Boolean {
         return declarativeModelStore?.isAvailable() ?: false;
     }
 

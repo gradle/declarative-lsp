@@ -121,7 +121,13 @@ class DeclarativeTextDocumentService : TextDocumentService {
                     val version = it.textDocument.version
                     val text = change.text
                     val parsed = parse(uri, change.text, resources)
-                    documentStore.storeVersioned(uri, version, text, parsed.documentOverlayResult, parsed.analysisSchemas)
+                    documentStore.storeVersioned(
+                        uri,
+                        version,
+                        text,
+                        parsed.documentOverlayResult,
+                        parsed.analysisSchemas
+                    )
                         ?.also { storeEntry -> valueFactoryIndexStore.store(uri, storeEntry) }
                     processDocument(uri)
                 }
@@ -144,7 +150,10 @@ class DeclarativeTextDocumentService : TextDocumentService {
         params?.let {
             val uri = URI(it.textDocument.uri)
             // If the document is a settings file, we make an attempt updating the model
-            if (uri.path.endsWith("settings.gradle") || uri.path.endsWith("settings.gradle.kts")) {
+            if (uri.path.endsWith("settings.gradle")
+                || uri.path.endsWith("settings.gradle.kts")
+                || uri.path.endsWith("settings.gradle.dcl")
+            ) {
                 LOGGER.info("Settings file changed, reloading declarative model")
                 declarativeResources.updateModel()
             }
@@ -194,10 +203,10 @@ class DeclarativeTextDocumentService : TextDocumentService {
                     .let { it ?: schema.topLevelReceiverType }
                     .let { dataClass ->
                         computePropertyCompletions(dataClass, typeRefContext) +
-                            computePropertyByValueFactoryCompletions(
-                                dataClass, schema, typeRefContext, valueFactoryIndex
-                            ) +
-                            computeFunctionCompletions(dataClass, typeRefContext)
+                                computePropertyByValueFactoryCompletions(
+                                    dataClass, schema, typeRefContext, valueFactoryIndex
+                                ) +
+                                computeFunctionCompletions(dataClass, typeRefContext)
                     }
             }
         }.orEmpty().toMutableList()

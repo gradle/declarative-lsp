@@ -20,7 +20,6 @@ import java.time.format.DateTimeFormatter
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.detekt)
     alias(libs.plugins.shadow)
     `maven-publish`
@@ -79,8 +78,6 @@ testing {
                 implementation(project())
                 implementation(libs.mockk)
                 implementation(libs.gradle.tooling.api)
-                implementation(libs.kotlin.reflect)
-                implementation(libs.kotlinx.serialization.json)
             }
         }
 

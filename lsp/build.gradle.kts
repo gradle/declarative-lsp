@@ -77,7 +77,8 @@ testing {
             dependencies {
                 implementation(project())
                 implementation(libs.mockk)
-                implementation(libs.gradle.tooling.api)
+                implementation(libs.kotlin.reflect)
+                implementation(libs.junit5.parameterized)
             }
         }
 

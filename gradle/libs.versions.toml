@@ -10,6 +10,7 @@ logback = "1.5.6"
 kotlin = "2.2.0"
 mockk = "1.13.12"
 shadow = "8.3.0"
+junit = "5.10.0"
 
 [libraries]
 lsp4j = { group = "org.eclipse.lsp4j", name = "org.eclipse.lsp4j", version.ref = "lsp4j" }
@@ -19,7 +20,9 @@ gradle-declarative-dsl-api = { module = "org.gradle:gradle-declarative-dsl-api",
 gradle-declarative-dsl-core = { module = "org.gradle:gradle-declarative-dsl-core", version.ref = "declarative-dsl" }
 gradle-declarative-dsl-evaluator = { module = "org.gradle:gradle-declarative-dsl-evaluator", version.ref = "declarative-dsl" }
 gradle-declarative-dsl-tooling-models = { module = "org.gradle:gradle-declarative-dsl-tooling-models", version.ref = "declarative-dsl" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+junit5-parameterized = { group = "org.junit.jupiter", name = "junit-jupiter-params" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

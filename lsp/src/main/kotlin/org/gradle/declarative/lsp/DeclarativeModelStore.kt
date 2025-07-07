@@ -16,9 +16,10 @@
 
 package org.gradle.declarative.lsp
 
-import org.gradle.declarative.lsp.ToolingApiConnector.withToolingApi
 import org.gradle.declarative.lsp.build.action.GetDeclarativeResourcesModel
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
+import org.gradle.tooling.GradleConnector
+import org.gradle.tooling.ProjectConnection
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -27,28 +28,36 @@ import java.io.File
  * fetched by the Tooling API.
  */
 class DeclarativeModelStore(val projectRoot: File) {
-
     /**
      * The state of the last successful model retrieval.
      * Can be null if not yet retrieved or if the synchronization resulted in an error.
      */
+    var syncState = SyncState.UNSYNCED
+        private set
+
     private var declarativeModel: DeclarativeResourcesModel? = null
 
     /**
      * Updates the declarative model by executing a model builder over the TAPI.
      */
     fun updateModel() {
-        declarativeModel = withToolingApi(projectRoot) {
-            it.action(GetDeclarativeResourcesModel()).run()
+        var connection: ProjectConnection? = null
+        try {
+            connection = GradleConnector
+                .newConnector()
+                .forProjectDirectory(projectRoot)
+                .connect()
+            syncState = SyncState.SYNCED
+            declarativeModel = connection
+                .action(GetDeclarativeResourcesModel())
+                .run()
+        } catch (ex: Exception) {
+            LOGGER.error("Failed to execute Tooling API action", ex)
+            syncState = SyncState.FAILED_SYNC
+            throw ex
+        } finally {
+            connection?.close()
         }
-    }
-
-    /**
-     * Checks if the declarative model is available.
-     * @return `true` if the model is available, `false` otherwise.
-     */
-    fun isAvailable(): Boolean {
-        return declarativeModel != null
     }
 
     /**
@@ -57,16 +66,22 @@ class DeclarativeModelStore(val projectRoot: File) {
      *
      * @param action The action to perform with the declarative model.
      */
-    fun ifAvailable(action: (DeclarativeResourcesModel) -> Unit) {
-        if (!isAvailable()) {
-            LOGGER.warn("Declarative model is not available, cannot perform action.")
-            return
+    fun <T> ifAvailable(action: (DeclarativeResourcesModel) -> T): T? {
+        if (declarativeModel != null) {
+            return action(declarativeModel!!)
         } else {
-            action(declarativeModel!!)
+            LOGGER.warn("Declarative model is not available.")
+            return null
         }
     }
 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(DeclarativeModelStore::class.java)
     }
+}
+
+enum class SyncState {
+    UNSYNCED,
+    SYNCED,
+    FAILED_SYNC
 }

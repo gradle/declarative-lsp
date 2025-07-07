@@ -32,8 +32,12 @@ import org.eclipse.lsp4j.HoverParams
 import org.eclipse.lsp4j.InsertTextFormat
 import org.eclipse.lsp4j.InsertTextMode
 import org.eclipse.lsp4j.MarkupContent
+import org.eclipse.lsp4j.MessageActionItem
+import org.eclipse.lsp4j.MessageParams
+import org.eclipse.lsp4j.MessageType
 import org.eclipse.lsp4j.ParameterInformation
 import org.eclipse.lsp4j.PublishDiagnosticsParams
+import org.eclipse.lsp4j.ShowMessageRequestParams
 import org.eclipse.lsp4j.SignatureHelp
 import org.eclipse.lsp4j.SignatureHelpParams
 import org.eclipse.lsp4j.SignatureInformation
@@ -67,6 +71,8 @@ import org.gradle.internal.declarativedsl.evaluator.runner.stepResultOrPartialRe
 import org.slf4j.LoggerFactory
 import java.net.URI
 import java.util.concurrent.CompletableFuture
+import kotlin.io.path.name
+import kotlin.io.path.toPath
 
 private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::class.java)
 
@@ -147,16 +153,57 @@ class DeclarativeTextDocumentService : TextDocumentService {
     override fun didSave(params: DidSaveTextDocumentParams?) {
         LOGGER.trace("Saved document: {}", params)
 
-        params?.let {
-            val uri = URI(it.textDocument.uri)
-            // If the document is a settings file, we make an attempt updating the model
-            if (uri.path.endsWith("settings.gradle")
-                || uri.path.endsWith("settings.gradle.kts")
-                || uri.path.endsWith("settings.gradle.dcl")
+        params?.let { it ->
+            val textDocumentPath = URI(it.textDocument.uri).toPath()
+            val knownBuildFiles = declarativeResources.ifAvailable { resources ->
+                resources.buildScriptFiles.map { buildScript -> buildScript.toPath() }
+            }.orEmpty()
+
+            if (
+                textDocumentPath.name == "settings.gradle" ||
+                textDocumentPath.name == "settings.gradle.kts" ||
+                textDocumentPath.name == "settings.gradle.dcl" ||
+                knownBuildFiles.contains(textDocumentPath)
             ) {
-                LOGGER.info("Settings file changed, reloading declarative model")
-                declarativeResources.updateModel()
+                val showMessageRequestParams = ShowMessageRequestParams().apply {
+                    type = MessageType.Info
+                    message = "The build files have been changed. Declarative model might be out of sync."
+                    actions = mutableListOf(
+                        MessageActionItem("Resync"),
+                        MessageActionItem("Ignore")
+                    )
+                }
+                client.showMessageRequest(showMessageRequestParams).thenAccept { response ->
+                    when (response.title) {
+                        "Resync" -> {
+                            LOGGER.info("Resyncing the model after settings file change: {}", it.textDocument.uri)
+                            try {
+                                declarativeResources.updateModel()
+                            } catch (ex: Exception) {
+                                client.showMessage(
+                                    MessageParams(
+                                        MessageType.Error, """
+                                            Failed to resync the declarative model.
+                                            See the output for more details.
+                                        """.trimIndent()
+                                    )
+                                )
+                            }
+                            // Reprocess the document to update the diagnostics
+                        }
+
+                        "Ignore" -> {
+                            LOGGER.info("Ignoring the settings file change: {}", it.textDocument.uri)
+                        }
+
+                        else -> {
+                            LOGGER.warn("Unknown action in response to settings file change: {}", response.title)
+                        }
+                    }
+                }
             }
+
+            processDocument(URI(it.textDocument.uri))
         }
     }
 

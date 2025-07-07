@@ -39,6 +39,7 @@ fun main() {
         LOGGER.info("Language server stopped.")
     } catch (e: Exception) {
         LOGGER.error("Error while running the language server", e)
+
     }
 }
 

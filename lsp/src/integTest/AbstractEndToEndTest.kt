@@ -34,7 +34,7 @@ abstract class AbstractEndToEndTest {
     /**
      * Mocked [LanguageClient] that can be used to check on the server -> client communication.
      */
-    protected lateinit var languageClient: LanguageClient
+    protected val languageClient = mockk<LanguageClient>()
 
     /**
      * Unit under test language server
@@ -47,7 +47,6 @@ abstract class AbstractEndToEndTest {
     @BeforeEach
     fun setup() {
         languageServer = DeclarativeLanguageServer()
-        languageClient = mockk()
         languageServer.connect(languageClient)
     }
 
@@ -59,7 +58,6 @@ abstract class AbstractEndToEndTest {
 
     /**
      * Utility test function, that bootstraps the language server with a project directory.
-     *
      */
     fun initializeWithProjectDir(
         projectDir: File,

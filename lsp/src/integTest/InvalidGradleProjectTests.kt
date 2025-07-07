@@ -16,13 +16,19 @@
 
 package org.gradle.declarative.lsp.e2e
 
+import io.mockk.confirmVerified
+import io.mockk.every
+import io.mockk.verify
 import org.eclipse.lsp4j.DidSaveTextDocumentParams
+import org.eclipse.lsp4j.MessageType
+import org.eclipse.lsp4j.ShowMessageRequestParams
 import org.eclipse.lsp4j.TextDocumentIdentifier
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.gradle.declarative.lsp.SyncState
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
-import kotlin.test.assertFalse
+import java.util.concurrent.CompletableFuture
+import kotlin.test.assertEquals
 
 class InvalidGradleProjectTests : AbstractEndToEndTest() {
 
@@ -33,10 +39,26 @@ class InvalidGradleProjectTests : AbstractEndToEndTest() {
         settingsFile.writeText("INVALID SETTINGS FILE")
         // Initialize the project
         initializeWithProjectDir(projectDir)
-        assertFalse(languageServer.isModelAvailable(), "Server should not be initialized with a broken settings file")
+        assertEquals(SyncState.FAILED_SYNC, languageServer.syncState(), "Server should not be initialized with a broken settings file")
+        verify {
+            languageClient.showMessage(match {
+                it.type == MessageType.Error
+                it.message == any()
+            })
+        }
+        confirmVerified(languageClient)
 
         // Fix the settings file
         settingsFile.writeText("rootProject.name = 'valid-project'")
+        // When the synchronization happens, the server sends a showMessageRequest to the client
+        // We mock the client to always respond with the first action
+        every {
+            languageClient.showMessageRequest(any())
+        } answers {
+            val params = it.invocation.args[0] as ShowMessageRequestParams
+            val response = params.actions.first()
+            CompletableFuture.completedFuture(response)
+        }
         // Send a save notification to the server to initiate a resync
         textDocumentService.didSave(
             DidSaveTextDocumentParams(
@@ -45,7 +67,7 @@ class InvalidGradleProjectTests : AbstractEndToEndTest() {
                 )
             )
         )
-        assertTrue(languageServer.isModelAvailable(), "Server should be initialized after fixing the settings file")
+        assertEquals(SyncState.SYNCED, languageServer.syncState(), "Server should be initialized after fixing the settings file")
     }
 
     @Test
@@ -55,10 +77,19 @@ class InvalidGradleProjectTests : AbstractEndToEndTest() {
         }
         // Initialize the project
         initializeWithProjectDir(projectDir)
-        assertTrue(languageServer.isModelAvailable(), "Server should be initialized with valid settings file")
+        assertEquals(SyncState.SYNCED, languageServer.syncState(), "Server should be initialized with a valid settings file")
 
         // We break the project
         settingsFile.writeText("INVALID SETTINGS FILE")
+        // When the synchronization happens, the server sends a showMessageRequest to the client
+        // We mock the client to always respond with the first action
+        every {
+            languageClient.showMessageRequest(any())
+        } answers {
+            val params = it.invocation.args[0] as ShowMessageRequestParams
+            val response = params.actions.first()
+            CompletableFuture.completedFuture(response)
+        }
         // Send a didSave notification to the server to initiate a resync
         textDocumentService.didSave(
             DidSaveTextDocumentParams(
@@ -67,7 +98,7 @@ class InvalidGradleProjectTests : AbstractEndToEndTest() {
                 )
             )
         )
-        assertFalse(languageServer.isModelAvailable(), "Server should not be initialized after breaking the settings file")
+        assertEquals(SyncState.FAILED_SYNC, languageServer.syncState(), "Server should not be initialized with a broken settings file")
 
         // Fix the settings file
         settingsFile.writeText("rootProject.name = 'valid-project'")
@@ -79,6 +110,6 @@ class InvalidGradleProjectTests : AbstractEndToEndTest() {
                 )
             )
         )
-        assertTrue(languageServer.isModelAvailable(), "Server should be initialized after fixing the settings file")
+        assertEquals(SyncState.SYNCED, languageServer.syncState(), "Server should be initialized after fixing the settings file")
     }
 }

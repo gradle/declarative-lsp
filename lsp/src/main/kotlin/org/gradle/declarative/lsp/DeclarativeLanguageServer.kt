@@ -20,14 +20,13 @@ import com.google.gson.JsonObject
 import org.eclipse.lsp4j.CompletionOptions
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.InitializeResult
-import org.eclipse.lsp4j.ProgressParams
+import org.eclipse.lsp4j.MessageParams
+import org.eclipse.lsp4j.MessageType
 import org.eclipse.lsp4j.ServerCapabilities
 import org.eclipse.lsp4j.SetTraceParams
 import org.eclipse.lsp4j.SignatureHelpOptions
 import org.eclipse.lsp4j.TextDocumentSyncKind
 import org.eclipse.lsp4j.TraceValue
-import org.eclipse.lsp4j.WorkDoneProgressBegin
-import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
@@ -103,24 +102,21 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         val workspaceFolder = params.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))
 
-        // Progress reporting under initialization only works with clients providing a `workDoneToken`
-        params.workDoneToken?.let {
-            client.notifyProgress(
-                ProgressParams(
-                    params.workDoneToken,
-                    Either.forLeft(
-                        WorkDoneProgressBegin().apply {
-                            title = "Fetching Declarative Gradle model"
-                        }
-                    )
-                )
-            )
-        }
-
         declarativeModelStore = DeclarativeModelStore(workspaceFolderFile).apply {
             // We immediately try to sync the declarative model.
             // The synchronization might be unsuccessful if the project is broken, but it won't crash the server.
-            this.updateModel()
+            try {
+                this.updateModel()
+            } catch (_: Exception) {
+                client.showMessage(
+                    MessageParams(
+                        MessageType.Error, """
+                            Failed to initialize the Gradle model.
+                            See the output for more details.
+                        """.trimIndent()
+                    )
+                )
+            }
             // Initialize the core LSP services
             textDocumentService.initialize(
                 client,
@@ -170,12 +166,11 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
      * Checks if the language server is initialized and the declarative model store is available.
      * Used mainly by tests to check on the langauge server's internal state.
      */
-    fun isModelAvailable(): Boolean {
-        return declarativeModelStore?.isAvailable() ?: false;
+    fun syncState(): SyncState? {
+        return declarativeModelStore?.syncState
     }
 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(DeclarativeLanguageServer::class.java)
-        private const val MODEL_FETCH_PROGRESS_TOKEN = "modelFetchProgress"
     }
 }

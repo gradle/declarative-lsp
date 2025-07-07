@@ -33,14 +33,10 @@ fun main() {
         System.`in`,
         System.out
     )
-    LOGGER.info("Language server started, listening for requests...")
-    try {
-        listener.get() // Block until the server is stopped
-        LOGGER.info("Language server stopped.")
-    } catch (e: Exception) {
-        LOGGER.error("Error while running the language server", e)
 
-    }
+    LOGGER.info("Language server started, listening for requests...")
+    listener.get() // Block until the server is stopped
+    LOGGER.info("Language server stopped.")
 }
 
 fun startDeclarativeLanguageServer(

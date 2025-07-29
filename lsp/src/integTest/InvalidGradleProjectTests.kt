@@ -42,8 +42,7 @@ class InvalidGradleProjectTests : AbstractEndToEndTest() {
         assertEquals(SyncState.FAILED_SYNC, languageServer.syncState(), "Server should not be initialized with a broken settings file")
         verify {
             languageClient.showMessage(match {
-                it.type == MessageType.Error
-                it.message == any()
+                it.type == MessageType.Error && it.message.isNotBlank()
             })
         }
         confirmVerified(languageClient)

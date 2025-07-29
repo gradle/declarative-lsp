@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.service
+package org.gradle.declarative.lsp
 
-import org.gradle.declarative.lsp.computeCompletionLabel
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 

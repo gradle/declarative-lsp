@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.gradle.declarative.lsp.service
+package org.gradle.declarative.lsp
 
 import org.gradle.declarative.dsl.schema.AnalysisSchema
 import org.gradle.declarative.lsp.extension.unionAnalysisSchema

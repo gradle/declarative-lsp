@@ -20,36 +20,51 @@ import com.google.gson.JsonObject
 import org.eclipse.lsp4j.CompletionOptions
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.InitializeResult
-import org.eclipse.lsp4j.ProgressParams
+import org.eclipse.lsp4j.MessageParams
+import org.eclipse.lsp4j.MessageType
 import org.eclipse.lsp4j.ServerCapabilities
 import org.eclipse.lsp4j.SetTraceParams
 import org.eclipse.lsp4j.SignatureHelpOptions
 import org.eclipse.lsp4j.TextDocumentSyncKind
 import org.eclipse.lsp4j.TraceValue
-import org.eclipse.lsp4j.WorkDoneProgressBegin
-import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageClientAware
 import org.eclipse.lsp4j.services.LanguageServer
 import org.eclipse.lsp4j.services.TextDocumentService
 import org.eclipse.lsp4j.services.WorkspaceService
+import org.gradle.declarative.lsp.mutation.MutationRegistry
 import org.gradle.declarative.lsp.mutation.definition.AddLibraryDependency
 import org.gradle.declarative.lsp.mutation.definition.SetJavaVersion
-import org.gradle.declarative.lsp.service.MutationRegistry
-import org.gradle.declarative.lsp.service.VersionedDocumentStore
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.net.URI
 import java.util.concurrent.CompletableFuture
 import kotlin.system.exitProcess
 
+/**
+ * Top-level class implementing the language server.
+ *
+ * This class is responsible for holding onto centralized state holders,
+ * and distributing them to specific LSP services like [DeclarativeTextDocumentService] and [DeclarativeWorkspaceService].
+ */
 class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
+
+    // LSP state holders
+    private var declarativeModelStore: DeclarativeModelStore? = null
+    private val documentStore = VersionedDocumentStore()
+    private var initialized = false
+    private var tracingLevel = TraceValue.Off
+    private val mutationRegistry = MutationRegistry(
+        listOf(
+            SetJavaVersion(),
+            AddLibraryDependency()
+        )
+    )
+
+    // LSP services
+    private lateinit var client: LanguageClient
     private val textDocumentService = DeclarativeTextDocumentService()
     private val workspaceService = DeclarativeWorkspaceService()
-
-    private lateinit var client: LanguageClient
-    private var initialized = false
-    private var tracingLevel = TraceValue.Off;
 
     private fun checkInitialized() {
         require(initialized) {
@@ -87,47 +102,34 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         val workspaceFolder = params.workspaceFolders[0]
         val workspaceFolderFile = File(URI.create(workspaceFolder.uri))
 
-        // Progress reporting under initialization only works with clients providing a `workDoneToken`
-        params.workDoneToken?.let {
-            client.notifyProgress(
-                ProgressParams(
-                    params.workDoneToken,
-                    Either.forLeft(
-                        WorkDoneProgressBegin().apply {
-                            title = "Fetching Declarative Gradle model"
-                        }
+        declarativeModelStore = DeclarativeModelStore(workspaceFolderFile).apply {
+            // We immediately try to sync the declarative model.
+            // The synchronization might be unsuccessful if the project is broken, but it won't crash the server.
+            try {
+                this.updateModel()
+            } catch (_: Exception) {
+                client.showMessage(
+                    MessageParams(
+                        MessageType.Error, """
+                            Failed to initialize the Gradle model.
+                            See the output for more details.
+                        """.trimIndent()
                     )
                 )
-            )
-        }
-
-        LOGGER.info("Fetching declarative model for workspace folder: $workspaceFolderFile")
-        TapiConnectionHandler(workspaceFolderFile).let {
-            val declarativeResources = it.getDeclarativeResources()
-
-            // Create services shared between the LSP services
-            val documentStore = VersionedDocumentStore()
-            val mutationRegistry = MutationRegistry(
-                declarativeResources,
-                listOf(
-                    SetJavaVersion(),
-                    AddLibraryDependency()
-                )
-            )
-
-            // Initialize the LSP services
+            }
+            // Initialize the core LSP services
             textDocumentService.initialize(
                 client,
                 documentStore,
                 mutationRegistry,
                 declarativeFeatures,
-                declarativeResources
+                this
             )
             workspaceService.initialize(
                 client,
                 documentStore,
                 mutationRegistry,
-                declarativeResources
+                this
             )
         }
 
@@ -148,12 +150,10 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
     }
 
     override fun getTextDocumentService(): TextDocumentService {
-        LOGGER.info("Gradle Declarative Language Server: getTextDocumentService")
         return textDocumentService
     }
 
     override fun getWorkspaceService(): WorkspaceService {
-        LOGGER.info("Gradle Declarative Language Server: getWorkspaceService")
         return workspaceService
     }
 
@@ -162,8 +162,15 @@ class DeclarativeLanguageServer : LanguageServer, LanguageClientAware {
         tracingLevel = params?.value ?: TraceValue.Off
     }
 
+    /**
+     * Checks if the language server is initialized and the declarative model store is available.
+     * Used mainly by tests to check on the langauge server's internal state.
+     */
+    fun syncState(): SyncState? {
+        return declarativeModelStore?.syncState
+    }
+
     companion object {
         private val LOGGER = LoggerFactory.getLogger(DeclarativeLanguageServer::class.java)
-        private const val MODEL_FETCH_PROGRESS_TOKEN = "modelFetchProgress"
     }
 }

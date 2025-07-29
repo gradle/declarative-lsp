@@ -7,7 +7,7 @@ declarative-dsl = "8.14-milestone-7"
 detekt = "1.23.6"
 lsp4j = "0.23.1"
 logback = "1.5.18"
-kotlin = "2.0.0"
+kotlin = "2.2.0"
 mockk = "1.13.12"
 shadow = "8.3.0"
 
@@ -21,6 +21,7 @@ gradle-declarative-dsl-evaluator = { module = "org.gradle:gradle-declarative-dsl
 gradle-declarative-dsl-tooling-models = { module = "org.gradle:gradle-declarative-dsl-tooling-models", version.ref = "declarative-dsl" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+junit5-parameterized = { group = "org.junit.jupiter", name = "junit-jupiter-params" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

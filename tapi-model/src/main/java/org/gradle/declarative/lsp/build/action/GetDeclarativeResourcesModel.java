@@ -21,9 +21,13 @@ import org.gradle.declarative.dsl.tooling.models.DeclarativeSchemaModel;
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel;
 import org.gradle.tooling.BuildAction;
 import org.gradle.tooling.BuildController;
-import org.gradle.tooling.model.gradle.GradleBuild;
+import org.gradle.tooling.model.GradleProject;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Stack;
 
 public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeResourcesModel> {
 
@@ -32,30 +36,43 @@ public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeReso
         DeclarativeSchemaModel declarativeSchemaModel = controller.getModel(DeclarativeSchemaModel.class);
         InterpretationSequence settingsSchema = declarativeSchemaModel.getSettingsSequence();
         InterpretationSequence projectSchema = declarativeSchemaModel.getProjectSequence();
-        File rootDir = getRootDir(controller);
-        return new DeclarativeResourcesModelImpl(settingsSchema, projectSchema, rootDir);
+        List<File> projectBuildFiles = getProjectBuildFiles(controller);
+        return new DeclarativeResourcesModelImpl(settingsSchema, projectSchema, projectBuildFiles);
     }
 
-    private static File getRootDir(BuildController controller) {
-        GradleBuild gradleBuild = controller.getModel(GradleBuild.class);
-        return gradleBuild.getRootProject().getProjectDirectory();
+    private List<File> getProjectBuildFiles(BuildController controller) {
+        GradleProject project = controller.getModel(GradleProject.class);
+        List<File> buildFiles = new ArrayList<>();
+
+        // DFS of the project hierarchy to collect build script files
+        Stack<GradleProject> projectStack = new Stack<>();
+        projectStack.push(project);
+        while (!projectStack.isEmpty()) {
+            GradleProject currentProject = projectStack.pop();
+            currentProject.getChildren().forEach(projectStack::push);
+
+            if (currentProject.getBuildScript().getSourceFile() != null) {
+                buildFiles.add(currentProject.getBuildScript().getSourceFile());
+            }
+        }
+
+        return buildFiles;
     }
 
-    
     private static final class DeclarativeResourcesModelImpl implements DeclarativeResourcesModel {
 
         private final InterpretationSequence settingsSequence;
         private final InterpretationSequence projectSequence;
-        private final File rootDir;
+        private final List<File> buildScriptFiles;
 
         public DeclarativeResourcesModelImpl(
                 InterpretationSequence settingsSequence,
                 InterpretationSequence projectSequence,
-                File rootDir
+                List<File> buildScriptFiles
         ) {
             this.settingsSequence = settingsSequence;
             this.projectSequence = projectSequence;
-            this.rootDir = rootDir;
+            this.buildScriptFiles = buildScriptFiles;
         }
 
         @Override
@@ -69,8 +86,9 @@ public class GetDeclarativeResourcesModel implements BuildAction<DeclarativeReso
         }
 
         @Override
-        public File getRootDir() {
-            return rootDir;
+        public List<File> getBuildScriptFiles() {
+            return Collections.unmodifiableList(buildScriptFiles);
         }
+
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 the original author or authors.
+ * Copyright 2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,13 @@
  * limitations under the License.
  */
 
-plugins {
-    `java-library`
-}
+package org.gradle.declarative.lsp.extension
 
-description = "Models specific to the Gradle Declarative LSP server"
+import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
+import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
 
-dependencies {
-    api(libs.gradle.tooling.api)
-    api(libs.gradle.declarative.dsl.tooling.models)
-}
-
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(8))
-    }
-}
+fun DeclarativeResourcesModel.schemaAnalysisEvaluator(): SimpleAnalysisEvaluator =
+    SimpleAnalysisEvaluator.withSchema(
+        this.settingsInterpretationSequence,
+        this.projectInterpretationSequence
+    )

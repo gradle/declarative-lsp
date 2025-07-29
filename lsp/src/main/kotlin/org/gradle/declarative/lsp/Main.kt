@@ -22,26 +22,35 @@ package org.gradle.declarative.lsp
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.concurrent.Future
 
 private val LOGGER: Logger = LoggerFactory.getLogger("org.gradle.declarative.lsp.Main")
 
 fun main() {
-    val languageServer = DeclarativeLanguageServer()
+    val listener = startDeclarativeLanguageServer(
+        System.`in`,
+        System.out
+    )
 
+    LOGGER.info("Language server started, listening for requests...")
+    listener.get() // Block until the server is stopped
+    LOGGER.info("Language server stopped.")
+}
+
+fun startDeclarativeLanguageServer(
+    inputStream: InputStream,
+    outputStream: OutputStream
+): Future<Void> {
+    val languageServer = DeclarativeLanguageServer()
     val launcher = LSPLauncher.createServerLauncher(
         languageServer,
-        System.`in`,
-        System.out,
-//        false,
-//        PrintWriter(System.err)
+        inputStream,
+        outputStream
     )
     val remoteProxy = launcher.remoteProxy
     languageServer.connect(remoteProxy)
-
     // Start the language server
-    val listening = launcher.startListening()
-    LOGGER.info("Gradle Declarative Language Server: started")
-    // Wait until the language server is stopped
-    listening.get()
-    LOGGER.info("Gradle Declarative Language Server: stopped")
+    return launcher.startListening()
 }

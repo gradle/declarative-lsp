@@ -28,17 +28,13 @@ plugins {
 dependencies {
     implementation(project(":tapi-model"))
 
-    implementation(libs.lsp4j)
-    implementation(libs.logback.classic)
-    implementation(libs.gradle.tooling.api)
-    implementation(libs.gradle.declarative.dsl.api)
-    implementation(libs.gradle.declarative.dsl.core)
-    implementation(libs.gradle.declarative.dsl.evaluator)
-    implementation(libs.gradle.declarative.dsl.tooling.models)
-
-    testImplementation(libs.mockk)
-    testImplementation(libs.gradle.tooling.api)
-    testImplementation(libs.kotlin.reflect)
+    api(libs.lsp4j)
+    api(libs.gradle.tooling.api)
+    api(libs.gradle.declarative.dsl.api)
+    api(libs.gradle.declarative.dsl.core)
+    api(libs.gradle.declarative.dsl.evaluator)
+    api(libs.gradle.declarative.dsl.tooling.models)
+    api(libs.logback.classic)
 }
 
 detekt {
@@ -76,8 +72,31 @@ publishing {
 
 testing {
     suites {
-        val test by getting(JvmTestSuite::class) {
-            useKotlinTest("2.0.0")
+        withType<JvmTestSuite> {
+            useKotlinTest()
+            dependencies {
+                implementation(project())
+                implementation(libs.mockk)
+                implementation(libs.kotlin.reflect)
+                implementation(libs.junit5.parameterized)
+            }
+        }
+
+        val test by getting(JvmTestSuite::class)
+
+        register("integrationTest", JvmTestSuite::class) {
+            sources {
+                java {
+                    setSrcDirs(listOf("src/integTest"))
+                }
+            }
+            targets {
+                all {
+                    testTask.configure {
+                        shouldRunAfter(test)
+                    }
+                }
+            }
         }
     }
 }
@@ -87,6 +106,10 @@ tasks {
         manifest {
             attributes["Main-Class"] = "org.gradle.declarative.lsp.MainKt"
         }
+    }
+
+    check {
+        dependsOn(testing.suites)
     }
 }
 

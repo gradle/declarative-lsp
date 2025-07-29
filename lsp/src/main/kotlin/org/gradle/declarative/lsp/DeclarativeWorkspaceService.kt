@@ -19,8 +19,6 @@ package org.gradle.declarative.lsp
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import org.eclipse.lsp4j.ApplyWorkspaceEditParams
-import org.eclipse.lsp4j.ClientCapabilities
-import org.eclipse.lsp4j.ClientInfo
 import org.eclipse.lsp4j.DidChangeConfigurationParams
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams
 import org.eclipse.lsp4j.ExecuteCommandParams
@@ -32,9 +30,7 @@ import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.WorkspaceEdit
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.WorkspaceService
-import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
-import org.gradle.declarative.lsp.service.MutationRegistry
-import org.gradle.declarative.lsp.service.VersionedDocumentStore
+import org.gradle.declarative.lsp.mutation.MutationRegistry
 import org.gradle.internal.declarativedsl.dom.mutation.ModelMutationStepResult
 import org.gradle.internal.declarativedsl.dom.mutation.MutationArgumentContainer
 import org.gradle.internal.declarativedsl.dom.mutation.MutationAsTextRunner
@@ -52,23 +48,19 @@ class DeclarativeWorkspaceService : WorkspaceService {
     private lateinit var client: LanguageClient
     private lateinit var documentStore: VersionedDocumentStore
     private lateinit var mutationRegistry: MutationRegistry
-    private lateinit var declarativeResources: DeclarativeResourcesModel
+    private lateinit var declarativeResources: DeclarativeModelStore
     private lateinit var schemaAnalysisEvaluator: SimpleAnalysisEvaluator
 
     fun initialize(
         client: LanguageClient,
         documentStore: VersionedDocumentStore,
         mutationRegistry: MutationRegistry,
-        declarativeResources: DeclarativeResourcesModel
+        declarativeResources: DeclarativeModelStore
     ) {
         this.client = client
         this.documentStore = documentStore
         this.mutationRegistry = mutationRegistry
         this.declarativeResources = declarativeResources
-        this.schemaAnalysisEvaluator = SimpleAnalysisEvaluator.withSchema(
-            declarativeResources.settingsInterpretationSequence,
-            declarativeResources.projectInterpretationSequence
-        )
     }
 
     override fun didChangeConfiguration(params: DidChangeConfigurationParams?) {

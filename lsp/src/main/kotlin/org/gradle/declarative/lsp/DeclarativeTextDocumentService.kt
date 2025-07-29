@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,8 +32,12 @@ import org.eclipse.lsp4j.HoverParams
 import org.eclipse.lsp4j.InsertTextFormat
 import org.eclipse.lsp4j.InsertTextMode
 import org.eclipse.lsp4j.MarkupContent
+import org.eclipse.lsp4j.MessageActionItem
+import org.eclipse.lsp4j.MessageParams
+import org.eclipse.lsp4j.MessageType
 import org.eclipse.lsp4j.ParameterInformation
 import org.eclipse.lsp4j.PublishDiagnosticsParams
+import org.eclipse.lsp4j.ShowMessageRequestParams
 import org.eclipse.lsp4j.SignatureHelp
 import org.eclipse.lsp4j.SignatureHelpParams
 import org.eclipse.lsp4j.SignatureInformation
@@ -46,12 +50,12 @@ import org.gradle.declarative.dsl.schema.DataClass
 import org.gradle.declarative.dsl.schema.DataProperty
 import org.gradle.declarative.dsl.schema.DataType
 import org.gradle.declarative.dsl.schema.EnumClass
+import org.gradle.declarative.lsp.VersionedDocumentStore.DocumentStoreEntry
 import org.gradle.declarative.lsp.build.model.DeclarativeResourcesModel
 import org.gradle.declarative.lsp.extension.indexBasedOverlayResultFromDocuments
+import org.gradle.declarative.lsp.extension.schemaAnalysisEvaluator
 import org.gradle.declarative.lsp.extension.toLspRange
-import org.gradle.declarative.lsp.service.MutationRegistry
-import org.gradle.declarative.lsp.service.VersionedDocumentStore
-import org.gradle.declarative.lsp.service.VersionedDocumentStore.DocumentStoreEntry
+import org.gradle.declarative.lsp.mutation.MutationRegistry
 import org.gradle.declarative.lsp.visitor.BestFittingNodeVisitor
 import org.gradle.declarative.lsp.visitor.SemanticErrorToDiagnosticVisitor
 import org.gradle.declarative.lsp.visitor.SyntaxErrorToDiagnosticVisitor
@@ -63,11 +67,12 @@ import org.gradle.internal.declarativedsl.dom.mutation.MutationParameterKind
 import org.gradle.internal.declarativedsl.dom.operations.overlay.DocumentOverlayResult
 import org.gradle.internal.declarativedsl.dom.resolution.DocumentResolutionContainer
 import org.gradle.internal.declarativedsl.evaluator.main.AnalysisDocumentUtils.resolvedDocument
-import org.gradle.internal.declarativedsl.evaluator.main.SimpleAnalysisEvaluator
 import org.gradle.internal.declarativedsl.evaluator.runner.stepResultOrPartialResult
 import org.slf4j.LoggerFactory
 import java.net.URI
 import java.util.concurrent.CompletableFuture
+import kotlin.io.path.name
+import kotlin.io.path.toPath
 
 private val LOGGER = LoggerFactory.getLogger(DeclarativeTextDocumentService::class.java)
 
@@ -78,15 +83,14 @@ class DeclarativeTextDocumentService : TextDocumentService {
     private lateinit var valueFactoryIndexStore: ValueFactoryIndexStore
     private lateinit var mutationRegistry: MutationRegistry
     private lateinit var declarativeFeatures: DeclarativeFeatures
-    private lateinit var declarativeResources: DeclarativeResourcesModel
-    private lateinit var schemaAnalysisEvaluator: SimpleAnalysisEvaluator
+    private lateinit var declarativeResources: DeclarativeModelStore
 
     fun initialize(
         client: LanguageClient,
         documentStore: VersionedDocumentStore,
         mutationRegistry: MutationRegistry,
         declarativeFeatures: DeclarativeFeatures,
-        declarativeResources: DeclarativeResourcesModel
+        declarativeResources: DeclarativeModelStore
     ) {
         this.client = client
         this.declarativeFeatures = declarativeFeatures
@@ -94,40 +98,45 @@ class DeclarativeTextDocumentService : TextDocumentService {
         this.valueFactoryIndexStore = ValueFactoryIndexStore()
         this.mutationRegistry = mutationRegistry
         this.declarativeResources = declarativeResources
-
-        this.schemaAnalysisEvaluator = SimpleAnalysisEvaluator.withSchema(
-            declarativeResources.settingsInterpretationSequence,
-            declarativeResources.projectInterpretationSequence
-        )
     }
 
     // LSP Functions ---------------------------------------------------------------------------------------------------
 
     override fun didOpen(params: DidOpenTextDocumentParams?) {
-        LOGGER.trace("Opened document: {}", params)
-        params?.let {
-            val uri = URI(it.textDocument.uri)
-            val text = it.textDocument.text
-            val parsed = parse(uri, text)
-            run {
-                documentStore.storeInitial(uri, text, parsed.documentOverlayResult, parsed.analysisSchemas)
-                    ?.also { storeEntry -> valueFactoryIndexStore.store(uri, storeEntry) }
-                processDocument(uri)
+        declarativeResources.ifAvailable { resources ->
+            LOGGER.trace("Opened document: {}", params)
+            params?.let {
+                val uri = URI(it.textDocument.uri)
+                val text = it.textDocument.text
+                val parsed = parse(uri, text, resources)
+                run {
+                    documentStore.storeInitial(uri, text, parsed.documentOverlayResult, parsed.analysisSchemas)
+                        ?.also { storeEntry -> valueFactoryIndexStore.store(uri, storeEntry) }
+                    processDocument(uri)
+                }
             }
         }
     }
 
     override fun didChange(params: DidChangeTextDocumentParams?) {
         LOGGER.trace("Changed document: {}", params)
-        params?.let {
-            val uri = URI(it.textDocument.uri)
-            it.contentChanges.forEach { change ->
-                val version = it.textDocument.version
-                val text = change.text
-                val parsed = parse(uri, change.text)
-                documentStore.storeVersioned(uri, version, text, parsed.documentOverlayResult, parsed.analysisSchemas)
-                    ?.also { storeEntry -> valueFactoryIndexStore.store(uri, storeEntry) }
-                processDocument(uri)
+        declarativeResources.ifAvailable { resources ->
+            params?.let {
+                val uri = URI(it.textDocument.uri)
+                it.contentChanges.forEach { change ->
+                    val version = it.textDocument.version
+                    val text = change.text
+                    val parsed = parse(uri, change.text, resources)
+                    documentStore.storeVersioned(
+                        uri,
+                        version,
+                        text,
+                        parsed.documentOverlayResult,
+                        parsed.analysisSchemas
+                    )
+                        ?.also { storeEntry -> valueFactoryIndexStore.store(uri, storeEntry) }
+                    processDocument(uri)
+                }
             }
         }
     }
@@ -143,6 +152,59 @@ class DeclarativeTextDocumentService : TextDocumentService {
 
     override fun didSave(params: DidSaveTextDocumentParams?) {
         LOGGER.trace("Saved document: {}", params)
+
+        params?.let { it ->
+            val textDocumentPath = URI(it.textDocument.uri).toPath()
+            val knownBuildFiles = declarativeResources.ifAvailable { resources ->
+                resources.buildScriptFiles.map { buildScript -> buildScript.toPath() }
+            }.orEmpty()
+
+            if (
+                textDocumentPath.name == "settings.gradle" ||
+                textDocumentPath.name == "settings.gradle.kts" ||
+                textDocumentPath.name == "settings.gradle.dcl" ||
+                knownBuildFiles.contains(textDocumentPath)
+            ) {
+                val showMessageRequestParams = ShowMessageRequestParams().apply {
+                    type = MessageType.Info
+                    message = "The build files have been changed. Declarative model might be out of sync."
+                    actions = mutableListOf(
+                        MessageActionItem("Resync"),
+                        MessageActionItem("Ignore")
+                    )
+                }
+                client.showMessageRequest(showMessageRequestParams).thenAccept { response ->
+                    when (response.title) {
+                        "Resync" -> {
+                            LOGGER.info("Resyncing the model after settings file change: {}", it.textDocument.uri)
+                            try {
+                                declarativeResources.updateModel()
+                            } catch (ex: Exception) {
+                                client.showMessage(
+                                    MessageParams(
+                                        MessageType.Error, """
+                                            Failed to resync the declarative model.
+                                            See the output for more details.
+                                        """.trimIndent()
+                                    )
+                                )
+                            }
+                            // Reprocess the document to update the diagnostics
+                        }
+
+                        "Ignore" -> {
+                            LOGGER.info("Ignoring the settings file change: {}", it.textDocument.uri)
+                        }
+
+                        else -> {
+                            LOGGER.warn("Unknown action in response to settings file change: {}", response.title)
+                        }
+                    }
+                }
+            }
+
+            processDocument(URI(it.textDocument.uri))
+        }
     }
 
     override fun hover(params: HoverParams?): CompletableFuture<Hover> {
@@ -188,10 +250,10 @@ class DeclarativeTextDocumentService : TextDocumentService {
                     .let { it ?: schema.topLevelReceiverType }
                     .let { dataClass ->
                         computePropertyCompletions(dataClass, typeRefContext) +
-                            computePropertyByValueFactoryCompletions(
-                                dataClass, schema, typeRefContext, valueFactoryIndex
-                            ) +
-                            computeFunctionCompletions(dataClass, typeRefContext)
+                                computePropertyByValueFactoryCompletions(
+                                    dataClass, schema, typeRefContext, valueFactoryIndex
+                                ) +
+                                computeFunctionCompletions(dataClass, typeRefContext)
                     }
             }
         }.orEmpty().toMutableList()
@@ -322,9 +384,9 @@ class DeclarativeTextDocumentService : TextDocumentService {
         val analysisSchemas: List<AnalysisSchema>
     )
 
-    private fun parse(uri: URI, text: String): ParsedDocument {
+    private fun parse(uri: URI, text: String, resourcesModel: DeclarativeResourcesModel): ParsedDocument {
         val fileName = uri.path.substringAfterLast('/')
-        val analysisResult = schemaAnalysisEvaluator.evaluate(fileName, text)
+        val analysisResult = resourcesModel.schemaAnalysisEvaluator().evaluate(fileName, text)
 
         // Workaround: for now, the mutation utilities cannot handle mutations that touch the underlay document content.
         // To avoid that, use the utility that produces an overlay result with no real underlay content.
@@ -393,14 +455,16 @@ private fun computePropertyByValueFactoryCompletions(
             factoriesForProperty
                 ?.flatMap { indexEntry ->
                     val functionReturnType = typeRefContext.resolveRef(indexEntry.function.returnValueType)
-                    val genericTypeSubstitution = typeRefContext.computeGenericTypeSubstitutionIfAssignable(propertiesType, functionReturnType)
+                    val genericTypeSubstitution =
+                        typeRefContext.computeGenericTypeSubstitutionIfAssignable(propertiesType, functionReturnType)
                     genericTypeSubstitution?.let { typeSubstitution ->
-                        val completionLabel = indexEntry.function.computeCompletionLabel(typeRefContext, typeSubstitution)
+                        val completionLabel =
+                            indexEntry.function.computeCompletionLabel(typeRefContext, typeSubstitution)
                         val insertionText = indexEntry.function.computeCompletionInsertText(typeRefContext)
 
                         fun propertyCompletionItem(withPlus: Boolean): CompletionItem {
                             val operator = if (withPlus) "+=" else "="
-                            
+
                             return CompletionItem(
                                 "${property.name} $operator ${indexEntry.namePrefix}$completionLabel"
                             ).apply {
@@ -413,10 +477,12 @@ private fun computePropertyByValueFactoryCompletions(
                         val hasPlusEqualsAugmentation = schema.assignmentAugmentationsByTypeName[propertiesType.name]
                             .orEmpty()
                             .any { it.kind is AssignmentAugmentationKind.Plus }
-                        
+
                         listOfNotNull(
                             propertyCompletionItem(false),
-                            if (hasPlusEqualsAugmentation) { propertyCompletionItem(true) } else null
+                            if (hasPlusEqualsAugmentation) {
+                                propertyCompletionItem(true)
+                            } else null
                         )
                     }.orEmpty()
                 } ?: emptyList()

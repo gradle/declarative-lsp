@@ -16,7 +16,10 @@
 
 package org.gradle.declarative.lsp.e2e
 
+import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.runs
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.InitializeResult
 import org.eclipse.lsp4j.WorkspaceFolder
@@ -48,6 +51,9 @@ abstract class AbstractEndToEndTest {
     fun setup() {
         languageServer = DeclarativeLanguageServer()
         languageServer.connect(languageClient)
+
+        // We will mock the client to always respond with a successful message
+        every { languageClient.showMessage(any()) } just runs
     }
 
     @AfterEach
